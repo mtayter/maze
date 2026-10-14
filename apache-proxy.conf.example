@@ -1,0 +1,18 @@
+# Apache reverse-proxy config for the maze API (EXAMPLE — no secrets here).
+#
+# The browser frontend (public/) is static files served by Apache, while the
+# API (server/maze.js) listens on 127.0.0.1:3000. This snippet proxies the
+# /app/maze/ API path to the Node server. Adapt the paths to your setup,
+# copy to your Apache config, and reload Apache.
+#
+#   sudo cp apache-proxy.conf.example /etc/apache2/conf-available/maze.conf
+#   sudo a2enconf maze
+#   sudo systemctl reload apache2
+#
+# Serve the frontend by copying the static files into your web root, e.g.:
+#   sudo mkdir -p /var/www/html/maze
+#   sudo cp -r public/* /var/www/html/maze/
+# Then open https://<your-host>/maze/maze.html to play.
+
+ProxyPass "/app/maze/" "http://127.0.0.1:3000/app/maze/"
+ProxyPassReverse "/app/maze/" "http://127.0.0.1:3000/app/maze/"

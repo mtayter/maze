@@ -1,0 +1,1 @@
+{"dependencies":{"express":"^5.1.0","mysql2":"^3.14.1"},"description":"First-person 3D maze game and maze editor. Express API backed by MySQL, static browser frontend.","license":"MIT","main":"server/maze.js","name":"maze","version":"1.0.0"}

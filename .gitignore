@@ -1,0 +1,39 @@
+# --- Local config / secrets (never commit) ---
+config.env
+*.env
+.env
+config/
+secrets/
+*.token
+.token
+tokens/
+
+# --- Database dumps / data ---
+*.sql.gz
+*.dump
+*.sqlite
+*.sqlite3
+*.db
+data/
+backups/
+
+# --- Keys / keystores / certificates (private material only) ---
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.jks
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Logs / OS ---
+*.log
+.DS_Store
+
+# --- Locally deployed copies (the .example is the committed template) ---
+apache-proxy.conf
