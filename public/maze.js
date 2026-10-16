@@ -8,7 +8,6 @@ let maze, player, map;
 let canvas, ctx;
 let panels;
 let fov, fx, fy;
-let audioPlayer;
 let maze_triangles;
 
 const wall_color = '#c0c0c0';
@@ -237,8 +236,7 @@ function move(d) {
   if(!wallBetween(player.x, player.z, ...player.whats(d))) {
     player.move(d);
     if(Math.floor(player.x) == maze.end_x && Math.floor(player.z) == maze.end_y) {
-      //alert("Great job!");
-      audioPlayer.play();
+      alert("Great job!");
     }
   draw();
   }
@@ -369,10 +367,7 @@ async function init() {
       &nbsp;&nbsp;
       WASD to move, arrows to turn, T/G to grow/shrink, M for map
     </div>
-    <audio id="audioPlayer" src="five_guys_for_lunch.mp3"></audio>
   `;
-
-  audioPlayer = document.getElementById('audioPlayer');
 
   canvas = document.getElementById('mazeCanvas');
   ctx = canvas.getContext('2d');
