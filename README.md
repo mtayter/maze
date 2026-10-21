@@ -14,7 +14,7 @@ immediately playable in the game.
 
 ```
 Browser (static files in public/)
-  │  GET /maze/maze.html, /maze/draw.html, *.js, *.css, *.png, *.mp3
+  │  GET /maze/maze.html, /maze/draw.html, *.js, *.css, *.png
   │  fetch() calls to /app/maze/*
   ▼
 Apache (or any reverse proxy + static host)
@@ -159,7 +159,6 @@ public/                   Static browser frontend (game + editor)
   draw.html / draw.js     The editor
   Maze.js, Map.js, Geometry.js, Player.js, MazeDB.js, maze.css
   start.png, end.png     Start / end markers
-  five_guys_for_lunch.mp3 Sound played by the game
 schema.sql                Creates the maze table
 config.env.example        Config template (placeholders only)
 apache-proxy.conf.example Apache reverse-proxy snippet
