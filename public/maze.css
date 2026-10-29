@@ -367,6 +367,12 @@ body.signed-out .shell-nav { display: none; }
   color: #052e16;
 }
 .btn-primary:active { background: var(--accent-dark); }
+.btn:disabled {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+  cursor: not-allowed;
+  transform: none;
+}
 .btn[aria-pressed="true"] {
   background: var(--accent-soft);
   border-color: var(--accent);
