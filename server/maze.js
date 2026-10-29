@@ -81,6 +81,10 @@ function dbConfig() {
     user: process.env.MAZE_DB_USER,
     password: process.env.MAZE_DB_PASSWORD,
     database: process.env.MAZE_DB_NAME,
+    // All DATETIME writes use utcStr() (UTC wall time); read them back
+    // as raw strings so no timezone reinterpretation creeps in. The
+    // client treats them as UTC.
+    dateStrings: true,
   };
 }
 
@@ -119,8 +123,41 @@ async function migrate() {
         expires_at DATETIME NOT NULL,
         INDEX (user_id)
       )`);
+    // Sessions are history now: ending one (logout or expiry) stamps
+    // ended_at instead of deleting the row, so the admin page can
+    // list logins with their logout times.
+    await db.execute(
+      'ALTER TABLE session ADD COLUMN IF NOT EXISTS ended_at DATETIME NULL');
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS admin (
+        admin_id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES user (user_id)
+      )`);
     await db.execute(
       'ALTER TABLE maze ADD COLUMN IF NOT EXISTS user_id INT NULL');
+    // The owner (MAZE_OWNER_EMAIL) is the seeded admin — added once,
+    // only if their user row already exists and has no admin row yet.
+    if (OWNER_EMAIL) {
+      const [owners] = await db.execute(
+        'SELECT user_id FROM user WHERE LOWER(email) = ?', [OWNER_EMAIL]);
+      if (owners.length > 0) {
+        const [existing] = await db.execute(
+          'SELECT admin_id FROM admin WHERE user_id = ?', [owners[0].user_id]);
+        if (existing.length === 0) {
+          await db.execute('INSERT INTO admin (user_id) VALUES (?)',
+            [owners[0].user_id]);
+        }
+      }
+    }
+  });
+}
+
+async function isAdmin(userId) {
+  return withDb(async (db) => {
+    const [rows] = await db.execute(
+      'SELECT admin_id FROM admin WHERE user_id = ?', [userId]);
+    return rows.length > 0;
   });
 }
 
@@ -227,10 +264,16 @@ async function sessionUser(req) {
   return withDb(async (db) => {
     const [rows] = await db.execute(
       `SELECT u.* FROM session s JOIN user u ON u.user_id = s.user_id
-       WHERE s.token_hash = ? AND s.expires_at > ?`,
+       WHERE s.token_hash = ? AND s.expires_at > ? AND s.ended_at IS NULL`,
       [tokenHash, utcStr(new Date())]);
     if (rows.length === 0) {
-      await db.execute('DELETE FROM session WHERE token_hash = ?', [tokenHash]);
+      // Dead token presented: if its row merely expired without ever
+      // being ended, stamp its expiry as the end so the login history
+      // stays complete.
+      await db.execute(
+        `UPDATE session SET ended_at = expires_at
+         WHERE token_hash = ? AND ended_at IS NULL AND expires_at <= ?`,
+        [tokenHash, utcStr(new Date())]);
       return null;
     }
     return rows[0];
@@ -274,7 +317,7 @@ app.post('/app/maze/auth', async (req, res) => {
         [sha256Hex(token), user.user_id, utcStr(now), utcStr(expires)]);
     });
     res.setHeader('Set-Cookie', sessionCookieHeader(token));
-    res.json({ ok: true, user: publicUser(user) });
+    res.json({ ok: true, user: { ...publicUser(user), is_admin: await isAdmin(user.user_id) } });
   } catch (err) {
     console.error('Auth error:', err);
     res.status(500).json({ ok: false, error: 'server error' });
@@ -288,7 +331,7 @@ app.get('/app/maze/me', async (req, res) => {
       res.json({ ok: false });
       return;
     }
-    res.json({ ok: true, user: publicUser(user) });
+    res.json({ ok: true, user: { ...publicUser(user), is_admin: await isAdmin(user.user_id) } });
   } catch (err) {
     console.error('Auth error:', err);
     res.status(500).json({ ok: false, error: 'server error' });
@@ -300,7 +343,9 @@ app.post('/app/maze/logout', async (req, res) => {
     const token = parseCookies(req)[SESSION_COOKIE];
     if (token) {
       await withDb(async (db) => {
-        await db.execute('DELETE FROM session WHERE token_hash = ?', [sha256Hex(token)]);
+        await db.execute(
+          'UPDATE session SET ended_at = ? WHERE token_hash = ? AND ended_at IS NULL',
+          [utcStr(new Date()), sha256Hex(token)]);
       });
     }
     res.setHeader('Set-Cookie',
@@ -323,7 +368,7 @@ app.post('/app/maze/settings', requireAuth, async (req, res) => {
       await db.execute('UPDATE user SET avatar_color = ? WHERE user_id = ?',
         [color, req.user.user_id]);
     });
-    res.json({ ok: true, user: publicUser({ ...req.user, avatar_color: color }) });
+    res.json({ ok: true, user: { ...publicUser({ ...req.user, avatar_color: color }), is_admin: await isAdmin(req.user.user_id) } });
   } catch (err) {
     console.error('Settings error:', err);
     res.status(500).json({ ok: false, error: 'server error' });
@@ -455,6 +500,59 @@ app.get('/app/maze/events', requireAuth, (req, res) => {
     clearInterval(heartbeat);
     room.subs.delete(res);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Admin. Admins are rows in the `admin` table (the owner is seeded at
+// migration time). The logins list has one row per session, newest
+// login first; "current maze" comes from the live presence rooms, so
+// it is only set while that user is actually standing in a maze.
+// ---------------------------------------------------------------------------
+
+async function requireAdmin(req, res, next) {
+  try {
+    if (await isAdmin(req.user.user_id)) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: 'admins only' });
+  } catch (err) {
+    console.error('Admin check error:', err);
+    res.status(500).json({ error: 'server error' });
+  }
+}
+
+app.get('/app/maze/admin/logins', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const currentMaze = {}; // user_id -> maze name
+    for (const [name, room] of rooms) {
+      for (const userId of room.players.keys()) {
+        currentMaze[userId] = name;
+      }
+    }
+    const logins = await withDb(async (db) => {
+      const [rows] = await db.execute(
+        `SELECT u.name, u.email, u.avatar_color, s.user_id,
+                s.created_at AS login_at, s.ended_at AS logout_at
+         FROM session s JOIN user u ON u.user_id = s.user_id
+         ORDER BY s.created_at DESC`);
+      return rows;
+    });
+    res.json({
+      ok: true,
+      logins: logins.map((row) => ({
+        name: row.name,
+        email: row.email,
+        avatar_color: row.avatar_color,
+        current_maze: currentMaze[row.user_id] || null,
+        login_at: row.login_at,
+        logout_at: row.logout_at,
+      })),
+    });
+  } catch (err) {
+    console.error('Admin logins error:', err);
+    res.status(500).json({ error: 'server error' });
+  }
 });
 
 // ---------------------------------------------------------------------------

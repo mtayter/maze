@@ -3,8 +3,8 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.0.3';
-import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js?v=4.0.3';
+import Maze from '../Maze.js?v=4.1.0';
+import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js?v=4.1.0';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";

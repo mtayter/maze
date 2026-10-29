@@ -188,6 +188,38 @@ body.signed-out .shell-nav { display: none; }
 .settings-card h2 { margin: 0; font-size: 22px; }
 .settings-card h3 { margin: 22px 0 4px; font-size: 16px; }
 .settings-card .muted { color: var(--text-dim); margin: 4px 0; }
+.view-admin {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.admin-card {
+  background: var(--panel-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  padding: 26px;
+  max-width: 880px;
+  width: 100%;
+}
+.admin-card h2 { margin: 0; font-size: 22px; }
+.admin-card .muted { color: var(--text-dim); margin: 4px 0; }
+.admin-table-wrap { overflow-x: auto; margin-top: 14px; }
+.admin-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.admin-table th, .admin-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  white-space: nowrap;
+}
+.admin-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  vertical-align: -2px;
+  margin-right: 6px;
+}
 .profile-row {
   display: flex;
   align-items: center;
