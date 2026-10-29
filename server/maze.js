@@ -80,8 +80,15 @@ function dbConfig() {
 app.post('/app/maze/get', async (req, res) => {
   const postData = req.body;
   const rows = await getMaze(postData.maze);
-  rows[0].h = JSON.parse(rows[0].h);
-  rows[0].v = JSON.parse(rows[0].v);
+  if (!rows || rows.length === 0) {
+    res.status(404).json({ error: 'Maze not found' });
+    return;
+  }
+  // MariaDB treats LONGTEXT columns with a json_valid() check as its JSON
+  // type, and mysql2 returns those already parsed (arrays, not strings).
+  // Parse only when the driver handed us a string; pass arrays through.
+  rows[0].h = typeof rows[0].h === 'string' ? JSON.parse(rows[0].h) : rows[0].h;
+  rows[0].v = typeof rows[0].v === 'string' ? JSON.parse(rows[0].v) : rows[0].v;
   res.status(200).json(rows[0]);
 });
 
