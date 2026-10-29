@@ -5,14 +5,14 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=4.1.4';
-import Maze from '../Maze.js?v=4.1.4';
-import Player from '../Player.js?v=4.1.4';
-import Map from '../Map.js?v=4.1.4';
-import { Rect3d } from "../Geometry.js?v=4.1.4";
-import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.1.4';
-import * as Multiplayer from '../Multiplayer.js?v=4.1.4';
-import { getUser } from '../Auth.js?v=4.1.4';
+import { getMazeData, listMazes } from '../MazeDB.js?v=4.1.5';
+import Maze from '../Maze.js?v=4.1.5';
+import Player from '../Player.js?v=4.1.5';
+import Map from '../Map.js?v=4.1.5';
+import { Rect3d } from "../Geometry.js?v=4.1.5";
+import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.1.5';
+import * as Multiplayer from '../Multiplayer.js?v=4.1.5';
+import { getUser } from '../Auth.js?v=4.1.5';
 
 let maze, player, map;
 let canvas, ctx;
@@ -134,7 +134,7 @@ function myPos() {
 // direction and local +z onto their left, so x is the figure's
 // front-to-back thickness and z its left-to-right width. The wide
 // dimensions (legs stance 0.32, shoulders 0.38) run along z; the
-// thin ones (0.18 / 0.22) along x. (Before 4.1.4 these were
+// thin ones (0.18 / 0.22) along x. (Before 4.1.5 these were
 // swapped, which made the figure read as rotated 90°: narrow from
 // the front, wide from the side. The legs were also a single slab.)
 function personParts(color, s) {
@@ -182,12 +182,17 @@ function draw() {
 
   // Own body: the same figure everyone else sees (own avatar color,
   // own scale), minus the head, pitch-gated (see personParts) — but
-  // drawn shifted backward by EYE_FORWARD (scaled by Grow/Shrink,
-  // like the figure itself), as if the eyes stick out from the
-  // front of the face: the eye (0.135 ahead of the figure's center)
-  // ends up in front of every body front — head and torso at 0.11,
-  // legs at 0.09 — so looking down shows the FRONT of the body
-  // instead of the box interiors.
+  // drawn shifted backward by EYE_FORWARD, as if the eyes stick out
+  // from the front of the face: the eye (0.135 ahead of the figure's
+  // center) ends up in front of every body front — head and torso
+  // at 0.11, legs at 0.09 — so looking down shows the FRONT of the
+  // body instead of the box interiors.
+  // The shift is NOT scaled by Grow/Shrink: growing scales only the
+  // figure's heights, never its footprint, so the eye-to-face
+  // distance is the same at every size. (Scaling it slid the body
+  // backward as you grew — at eye height 2.5 the shift alone was
+  // 0.675, pushing the body through the wall behind you, which then
+  // correctly hid it. Found by Mike, 2026-10-29.)
   // Self view only; everyone else sees the figure at its true spot.
   const me = getUser();
   const myScale = player.y / 0.5;
@@ -199,7 +204,7 @@ function draw() {
   if (player.pitch < -0.55) {
     sprite.push(myParts.torso);
   }
-  const eyeShift = EYE_FORWARD * myScale;
+  const eyeShift = EYE_FORWARD;
   const everything = [
     ...panels,
     ...sprite.flat(1).map(shape => ({
