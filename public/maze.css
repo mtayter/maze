@@ -1,24 +1,425 @@
+/* Maze — shared design system
+   Clean + fun: dark slate glass panels, emerald accent, big rounded
+   touch targets, safe-area aware. Works with mouse, keyboard and touch. */
+
+:root {
+  --bg: #0f172a;
+  --panel: rgba(15, 23, 42, 0.82);
+  --panel-solid: #1e293b;
+  --panel-border: rgba(255, 255, 255, 0.14);
+  --text: #f8fafc;
+  --text-dim: #cbd5e1;
+  --accent: #22c55e;
+  --accent-dark: #16a34a;
+  --accent-soft: rgba(34, 197, 94, 0.18);
+  --amber: #f59e0b;
+  --danger: #ef4444;
+  --radius: 18px;
+  --radius-sm: 12px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --tap: 48px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+* { box-sizing: border-box; }
+
 html, body {
   width: 100%;
   height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
+  /* App-like pages: no pinch/double-tap page zoom (the viewport meta locks
+     it too). Without this, a pinch that starts on a canvas — which sets
+     touch-action: none — can't be pinched back out, stranding the user
+     zoomed-in. Grow/shrink is the player's height, not page zoom. */
+  touch-action: none;
+  overscroll-behavior: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Avenir Next", Avenir, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }
 
-canvas {
-  border-style: none;
-  border-width: 1px;
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  width: 100%;
+}
+
+/* ---------- shared controls ---------- */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  min-height: var(--tap);
+  padding: 10px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.btn:active { transform: scale(0.96); }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent-dark);
+  color: #052e16;
+}
+.btn-primary:active { background: var(--accent-dark); }
+.btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: #bbf7d0;
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.field select,
+.field input[type="text"],
+.field input[type="number"] {
+  font: inherit;
+  font-size: 16px; /* >=16px stops iOS focus zoom */
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  min-height: var(--tap);
+  padding: 8px 12px;
+  max-width: 100%;
+}
+.field input[type="number"] { width: 72px; }
+.field input[type="text"] { min-width: 0; }
+.field select { cursor: pointer; }
+/* The closed select sits on a dark bar (light text is right there), but
+   the native open list renders on white — give options their own
+   dark-on-white colors or the list is white-on-white and unreadable. */
+select option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+/* Segmented tool picker (editor) */
+.segmented {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+}
+.segmented label {
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.segmented input { position: absolute; opacity: 0; pointer-events: none; }
+.segmented label:has(input:checked) {
+  background: var(--accent);
+  color: #052e16;
+}
+
+/* ---------- play page ---------- */
+
+.play-page #app { position: relative; display: block; }
+
+canvas.game-canvas {
+  border: none;
   margin: 0;
   padding: 0;
   display: block;
   position: absolute;
+  inset: 0;
   z-index: 1;
+  touch-action: none; /* drag-to-look owns gestures on the 3D view */
 }
+#mapCanvas {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: none;
+  touch-action: manipulation;
+}
+
 #topbar {
-  background-color: white;
-  width: fit-content;
-  padding: 3px;
+  position: absolute;
+  z-index: 10;
+  top: calc(10px + var(--safe-top));
+  left: calc(10px + var(--safe-left));
+  right: calc(10px + var(--safe-right));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 8px 10px;
+  width: auto;
+}
+#topbar .brand {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+#topbar .field { flex: 1 1 140px; min-width: 0; }
+#topbar .field select { width: 100%; }
+#topbar .icon-btn {
+  min-width: var(--tap);
+  padding: 10px 12px;
+  font-size: 17px;
+}
+
+.hint-pill {
+  position: absolute;
+  z-index: 9;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(216px + var(--safe-bottom));
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Bottom controls, four elements spaced evenly across the width:
+   Move pad | Map | Grow/Shrink (stacked) | Look pad.
+   .mid-controls is display:contents on wide screens so Map and the
+   Grow/Shrink stack become separate flex items; on portrait phones
+   there isn't room for four across, so it becomes one narrow centre
+   column (Map on top, then Grow over Shrink) between the pads. */
+.touch-controls {
+  position: absolute;
+  z-index: 10;
+  left: calc(12px + var(--safe-left));
+  right: calc(12px + var(--safe-right));
+  bottom: calc(12px + var(--safe-bottom));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+}
+.mid-controls { display: contents; }
+.mid-controls > * { pointer-events: auto; }
+.mid-size {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mid-btn {
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+  min-width: 112px;
+  justify-content: flex-start;
+}
+.pad {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 60px);
+  grid-template-rows: repeat(3, 60px);
+  gap: 6px;
+}
+.pad .btn {
+  min-height: 60px;
+  min-width: 60px;
+  padding: 0;
+  font-size: 24px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+}
+.pad .btn:active { background: var(--accent-soft); }
+.pad .spacer { visibility: hidden; }
+.pad .pad-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+@media (pointer: coarse) {
+  .hint-pill { display: none; }
+}
+
+/* Portrait phones: one centre column instead of four across. */
+@media (max-width: 699px) {
+  .touch-controls { gap: 6px; }
+  .mid-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+    pointer-events: auto;
+  }
+  .mid-btn {
+    min-width: 58px;
+    min-height: 50px;
+    padding: 6px 2px;
+    font-size: 11px;
+    line-height: 1.15;
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+  }
+  .pad {
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, 44px);
+  }
+  .pad .btn { min-height: 44px; min-width: 44px; font-size: 20px; }
+  .hint-pill { display: none; }
+}
+
+/* Short landscape screens: shrink the pads so they don't eat the view. */
+@media (max-height: 500px) {
+  .pad {
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, 44px);
+  }
+  .pad .btn { min-height: 44px; min-width: 44px; font-size: 19px; }
+  .hint-pill { display: none; }
+}
+
+/* Win banner */
+.win-banner {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(2, 6, 23, 0.45);
+}
+.win-banner.show { display: flex; }
+.win-card {
+  background: var(--panel-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  padding: 28px 26px;
+  text-align: center;
+  max-width: 340px;
+  width: 100%;
+  animation: pop 0.25s ease-out;
+}
+.win-card .win-emoji { font-size: 52px; line-height: 1; }
+.win-card h2 { margin: 12px 0 6px; font-size: 26px; }
+.win-card p { margin: 0 0 18px; color: var(--text-dim); font-size: 15px; }
+@keyframes pop {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ---------- editor page ---------- */
+
+.draw-page #app { background: #f8fafc; color: #0f172a; }
+
+.editor-bar {
+  background: var(--panel-solid);
+  color: var(--text);
+  padding: calc(10px + var(--safe-top)) calc(12px + var(--safe-right))
+    10px calc(12px + var(--safe-left));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  box-shadow: var(--shadow);
+  z-index: 10;
+}
+.editor-bar .brand { font-size: 18px; font-weight: 800; white-space: nowrap; }
+.editor-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.editor-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.editor-group .group-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  width: 100%;
+}
+.editor-group-nowrap { flex-wrap: nowrap; }
+.editor-group-nowrap .field { white-space: nowrap; }
+.editor-bar .field { color: var(--text-dim); }
+
+.canvas-wrap {
   position: relative;
-  z-index: 2;
+  flex: 1 1 auto;
+  min-height: 0;
+  background:
+    radial-gradient(circle at 20% 20%, #ecfdf5 0, transparent 45%),
+    radial-gradient(circle at 85% 80%, #fef3c7 0, transparent 45%),
+    #f8fafc;
+}
+canvas.editor-canvas {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: block;
+  position: absolute;
+  inset: 0;
+  touch-action: none; /* taps place walls; stop scroll/zoom gestures */
+}
+
+@media (max-width: 640px) {
+  #topbar .brand { font-size: 16px; }
+  .editor-bar { gap: 8px 12px; }
+  .editor-group { flex: 1 1 auto; }
+  .editor-group .group-label { width: auto; }
 }

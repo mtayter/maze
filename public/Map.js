@@ -18,10 +18,21 @@ export default class Map {
     this.canvas.height = window.innerHeight;
   }
   draw() {
-    this.cell_size = Math.trunc(Math.min((this.canvas.width-100) / this.maze.h.length, (this.canvas.height-100) / this.maze.v.length));
+    if (!this.ctx || !this.maze) {
+      return;
+    }
+    // Keep a margin that suits the screen: snug on phones, airy on desktop,
+    // and centre the maze in the overlay instead of pinning it to a corner.
+    const pad = Math.max(16, Math.min(50, Math.floor(Math.min(this.canvas.width, this.canvas.height) * 0.06)));
+    this.cell_size = Math.trunc(Math.min((this.canvas.width - pad * 2) / this.maze.h.length, (this.canvas.height - pad * 2) / this.maze.v.length));
+    this.originX = Math.trunc((this.canvas.width - this.cell_size * this.maze.h.length) / 2);
+    this.originY = Math.trunc((this.canvas.height - this.cell_size * this.maze.v.length) / 2);
 
     this.ctx.fillStyle = 'white';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.ctx.strokeStyle = '#0f172a';
+    this.ctx.lineWidth = 2;
 
     this.#create4gon(this.maze.start_x+0.2,this.maze.start_y+0.2,this.maze.start_x+0.8,this.maze.start_y+0.2,this.maze.start_x+0.8,this.maze.start_y+0.8,this.maze.start_x+0.2,this.maze.start_y+0.8,this.start_color);
     this.#create4gon(this.maze.end_x+0.2,this.maze.end_y+0.2,this.maze.end_x+0.8,this.maze.end_y+0.2,this.maze.end_x+0.8,this.maze.end_y+0.8,this.maze.end_x+0.2,this.maze.end_y+0.8,this.end_color);
@@ -43,10 +54,10 @@ export default class Map {
   }
 
   #x(x) {
-    return x * this.cell_size + 50;
+    return x * this.cell_size + (this.originX ?? 50);
   }
   #y(y) {
-    return this.canvas.height - y * this.cell_size - 50;
+    return this.canvas.height - y * this.cell_size - (this.originY ?? 50);
   }
   #createline(x0, y0, x1, y1) {
     this.ctx.beginPath();

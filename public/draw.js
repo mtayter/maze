@@ -1,27 +1,40 @@
 import Maze from './Maze.js';
 import { saveMazeData, listMazes, getMazeData } from './MazeDB.js';
 
-let canvas, ctx, win_width, win_height, n, cell_size, h, v, selector = "walls";
+let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
+let h = null, v = null, selector = "walls";
 let startX = -1, startY = -1, endX = -1, endY = -1;
 
 async function save_maze() {
-  let new_maze = document.getElementById("name").value;
+  let new_maze = document.getElementById("name").value.trim();
+  if (!new_maze) {
+    alert('Give your maze a name first.');
+    return;
+  }
+  if (startX < 0 || endX < 0) {
+    alert('Place a start (red) and an end (green) square first.');
+    return;
+  }
+  let taken = false;
   document.querySelector('#mazeSelect').querySelectorAll('option').forEach(maze => {
     if(new_maze == maze.value) {
-      alert('That name is already taken.');
-      return false;
+      taken = true;
     }
   });
-  const data = await saveMazeData(new_maze,h,v,startX,startY,endX,endY,document.getElementById("directionSelect").value);
+  if (taken) {
+    alert('That name is already taken.');
+    return;
+  }
+  await saveMazeData(new_maze,h,v,startX,startY,endX,endY,document.getElementById("directionSelect").value);
   await populateMazeSelect();
   document.querySelector('#mazeSelect').value = new_maze;
 }
 
 function x(x) {
-  return x * cell_size + 50;
+  return x * cell_size + offsetX;
 }
 function y(y) {
-  return win_height - y * cell_size - 50;
+  return win_height - y * cell_size - offsetY;
 }
 function createline(x0, y0, x1, y1, color) {
   ctx.strokeStyle = color;
@@ -36,28 +49,55 @@ function createbox(x0, y0, color) {
   ctx.lineWidth = 10;
   ctx.fillRect(x(x0)+ctx.lineWidth, y(y0+1)+ctx.lineWidth, cell_size - ctx.lineWidth*2, cell_size - ctx.lineWidth*2);
 }
+
+function layout() {
+  if (!h || !v) return;
+  const maze_width = h.length;
+  const maze_height = v.length;
+  const margin = 24;
+  cell_size = Math.max(8, Math.trunc(Math.min((win_width - margin * 2) / maze_width, (win_height - margin * 2) / maze_height)));
+  offsetX = Math.trunc((win_width - cell_size * maze_width) / 2);
+  offsetY = Math.trunc((win_height - cell_size * maze_height) / 2);
+}
+
+function render() {
+  if (!h || !v || !ctx) return;
+  layout();
+  const maze_width = h.length;
+  const maze_height = v.length;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let x = 0; x < maze_width; x++) {
+    for (let y = 0; y <= maze_height; y++) {
+      createline(x, y, x + 1, y, h[x][y] ? '#000000' : '#e2e8f0');
+    }
+  }
+  for (let y = 0; y < maze_height; y++) {
+    for (let x = 0; x <= maze_width; x++) {
+      createline(x, y, x, y + 1, v[y][x] ? '#000000' : '#e2e8f0');
+    }
+  }
+  if (startX > -1) createbox(startX, startY, '#f00000');
+  if (endX > -1) createbox(endX, endY, '#00c853');
+}
+
 function draw_blank_maze() {
   startX = startY = endX = endY = -1;
-  let maze_width = parseInt(document.getElementById('width').value);
-  let maze_height = parseInt(document.getElementById('height').value);
+  let maze_width = parseInt(document.getElementById('width').value) || 10;
+  let maze_height = parseInt(document.getElementById('height').value) || 10;
 
   document.getElementById("name").value = "";
   document.querySelector('input[name="selectorRadio"][value="walls"]').click();
   document.getElementById("directionSelect").selectedIndex = 0;
   document.getElementById("mazeSelect").selectedIndex = 0;
 
-  cell_size = Math.trunc(Math.min((win_width - 100) / maze_width, (win_height - 100) / maze_height));
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   // Horizontal walls
   h = [];
   for (let x = 0; x < maze_width; x++) {
     h[x] = [];
     for (let y = 0; y <= maze_height; y++) {
-      let isBorder = (y === 0 || y === maze_height);
-      h[x][y] = isBorder ? 1 : 0;
-      createline(x, y, x + 1, y, isBorder ? '#000000' : '#f0f0f0');
+      h[x][y] = (y === 0 || y === maze_height) ? 1 : 0;
     }
   }
 
@@ -66,11 +106,11 @@ function draw_blank_maze() {
   for (let y = 0; y < maze_height; y++) {
     v[y] = [];
     for (let x = 0; x <= maze_width; x++) {
-      let isBorder = (x === 0 || x === maze_width);
-      v[y][x] = isBorder ? 1 : 0;
-      createline(x, y, x, y + 1, isBorder ? '#000000' : '#f0f0f0');
+      v[y][x] = (x === 0 || x === maze_width) ? 1 : 0;
     }
   }
+
+  render();
 }
 
 function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, direction) {
@@ -78,42 +118,24 @@ function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, di
   h = new_h;
   v = new_v;
 
-  let maze_width = document.getElementById('width').value = h.length;
-  let maze_height = document.getElementById('height').value = v.length;
+  document.getElementById('width').value = h.length;
+  document.getElementById('height').value = v.length;
 
   document.getElementById("name").value = name;
   document.querySelector('input[name="selectorRadio"][value="walls"]').click();
 
   document.querySelector('#directionSelect').value = direction;
 
-  cell_size = Math.trunc(Math.min((win_width - 100) / maze_width, (win_height - 100) / maze_height));
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Horizontal walls
-  for (let x = 0; x < maze_width; x++) {
-    for (let y = 0; y <= maze_height; y++) {
-      createline(x, y, x + 1, y, h[x][y] ? '#000000' : '#f0f0f0');
-    }
-  }
-
-  // Vertical walls
-  for (let y = 0; y < maze_height; y++) {
-    for (let x = 0; x <= maze_width; x++) {
-      createline(x, y, x, y + 1, v[y][x] ? '#000000' : '#f0f0f0');
-    }
-  }
-
-  createbox(start_x, start_y, '#f00000');
   startX = start_x;
   startY = start_y;
-
-  createbox(end_x, end_y, '#00f000');
   endX = end_x;
   endY = end_y;
+
+  render();
 }
 
 async function populateMazeSelect() {
+  const mazeSelect = document.getElementById('mazeSelect');
   let mazes = await listMazes();
   mazeSelect.length = 1;
   mazes.forEach(maze => {
@@ -121,34 +143,60 @@ async function populateMazeSelect() {
   });
 }
 
+function fitCanvas() {
+  win_width = wrap.clientWidth;
+  win_height = wrap.clientHeight;
+  canvas.width = win_width;
+  canvas.height = win_height;
+}
+
 async function init() {
 
   let app = document.getElementById('app');
   app.innerHTML = `
-    Width: <input type="text" id="width" size="3" value="10">
-    Height: <input type="text" id="height" size="3" value="10">
-    <button id="reloadBtn">Reload</button>
-    &nbsp; &nbsp; &nbsp;
-    <input type="radio" name="selectorRadio" value="walls" checked> Walls
-    <input type="radio" name="selectorRadio" value="start"> Start
-    <input type="radio" name="selectorRadio" value="end"> End
-    &nbsp; &nbsp; &nbsp;
-    Start direction: 
-    <select id="directionSelect">
-      <option value="n" selected>North</option>
-      <option value="e">East</option>
-      <option value="s">South</option>
-      <option value="w">West</option>
-    </select>
-    &nbsp; &nbsp; &nbsp;
-    Name: <input type="text" id="name" size="10">
-    &nbsp; &nbsp; &nbsp;
-    <select id="mazeSelect">
-      <option value=""></option>
-    </select>
-    &nbsp; &nbsp; &nbsp;
-    <button id="saveBtn">Save</button>
-    <canvas id="mazeCanvas"></canvas>
+    <header class="editor-bar">
+      <div class="editor-top">
+        <span class="brand">✏️ Create Maze</span>
+        <a class="btn" href="maze.html">🌀 Play</a>
+      </div>
+      <div class="editor-group">
+        <span class="group-label">Size</span>
+        <label class="field">W <input type="number" id="width" min="2" max="40" inputmode="numeric" value="10"></label>
+        <label class="field">H <input type="number" id="height" min="2" max="40" inputmode="numeric" value="10"></label>
+        <button class="btn" id="reloadBtn" type="button">🧹 New blank</button>
+      </div>
+      <div class="editor-group">
+        <span class="group-label">Tap places…</span>
+        <div class="segmented" role="radiogroup" aria-label="Editing tool">
+          <label><input type="radio" name="selectorRadio" value="walls" checked>🧱 Walls</label>
+          <label><input type="radio" name="selectorRadio" value="start">🔴 Start</label>
+          <label><input type="radio" name="selectorRadio" value="end">🟢 End</label>
+        </div>
+      </div>
+      <div class="editor-group editor-group-nowrap">
+        <label class="field">Start facing
+          <select id="directionSelect" aria-label="Start direction">
+            <option value="n" selected>⬆️ North</option>
+            <option value="e">➡️ East</option>
+            <option value="s">⬇️ South</option>
+            <option value="w">⬅️ West</option>
+          </select>
+        </label>
+        <label class="field">Load
+          <select id="mazeSelect" aria-label="Load a maze">
+            <option value="">Load…</option>
+          </select>
+        </label>
+      </div>
+      <div class="editor-group">
+        <span class="group-label">Name</span>
+        <label class="field"><input type="text" id="name" placeholder="Maze name" size="12"></label>
+        <button class="btn btn-primary" id="saveBtn" type="button">💾 Save</button>
+      </div>
+    </header>
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="mazeCanvas" class="editor-canvas"></canvas>
+    </div>
   `;
 
   const reloadBtn = document.getElementById('reloadBtn');
@@ -182,13 +230,12 @@ async function init() {
 
   mazeSelect.addEventListener('change', async () => {
     if(mazeSelect.value != '') {
-      let h, v, start_x, start_y, end_x, end_y, direction;
       try {
         const data = await getMazeData(mazeSelect.value);
-        ({ h, v, start_x, start_y, end_x, end_y, direction } = data);
-        draw_loaded_maze(mazeSelect.value, h, v, start_x, start_y, end_x, end_y, direction);
+        draw_loaded_maze(mazeSelect.value, data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction);
       } catch (err) {
         console.error('Failed to get maze data:', err);
+        alert(`Couldn't load “${mazeSelect.value}”. The maze server hiccuped — try again in a moment.`);
       }
     } else {
       document.getElementById('width').value = 10;
@@ -197,27 +244,30 @@ async function init() {
     }
   });
 
+  wrap = document.getElementById('canvasWrap');
   canvas = document.getElementById('mazeCanvas');
   ctx = canvas.getContext('2d');
-  win_width = window.innerWidth;
-  win_height = window.innerHeight;
-  canvas.width = win_width;
-  canvas.height = win_height;
+  fitCanvas();
 
-  canvas.addEventListener("click", function(event) {
+  // iOS Safari ignores user-scalable=no; block its pinch gesture event.
+  document.addEventListener('gesturestart', e => e.preventDefault());
+
+  canvas.addEventListener("pointerdown", function(event) {
+    if (!event.isPrimary) return;
+    event.preventDefault();
 
     const rect = canvas.getBoundingClientRect();
     let px = event.clientX - rect.left;
     let py = event.clientY - rect.top;
 
     // Convert pixel to grid coordinates relative to maze origin
-    let gx = (px - 50) / cell_size;
-    let gy = (win_height - py - 50) / cell_size;
+    let gx = (px - offsetX) / cell_size;
+    let gy = (win_height - py - offsetY) / cell_size;
 
     let color, wx, wy;
 
-    let maze_width = parseInt(document.getElementById('width').value);
-    let maze_height = parseInt(document.getElementById('height').value);
+    let maze_width = h.length;
+    let maze_height = v.length;
 
     if(selector == "walls") {
       // Determine if click is closer to horizontal or vertical wall
@@ -230,7 +280,7 @@ async function init() {
         wy = Math.round(gy);  // nearest horizontal wall
         if(wx >= 0 && wy >= 0 && wx < maze_width && wy <= maze_height) {
           h[wx][wy] = h[wx][wy] ? 0 : 1;
-          color = h[wx][wy] ? '#000000' : '#f0f0f0';
+          color = h[wx][wy] ? '#000000' : '#e2e8f0';
           createline(wx, wy, wx + 1, wy, color);
         }
       } else {
@@ -239,7 +289,7 @@ async function init() {
         wy = Math.floor(gy);
         if(wx >= 0 && wy >= 0 && wx <= maze_width && wy < maze_height) {
           v[wy][wx] = v[wy][wx] ? 0 : 1;
-          color = v[wy][wx] ? '#000000' : '#f0f0f0';
+          color = v[wy][wx] ? '#000000' : '#e2e8f0';
           createline(wx, wy, wx, wy + 1, color);
         }
       }
@@ -248,29 +298,27 @@ async function init() {
       wy = Math.floor(gy);
       if(wx >= 0 && wy >= 0 && wx < maze_width && wy < maze_height) {
         if(selector == "start") {
-          if(startX > -1) {
-            createbox(startX, startY, '#ffffff');
-          }
           if(wx == endX && wy == endY) {
             endX = endY = -1;
           }
-          createbox(wx, wy, '#f00000');
           startX = wx;
           startY = wy;
         } else {
-          if(endX > -1) {
-            createbox(endX, endY, '#ffffff');
-          }
           if(wx == startX && wy == startY) {
             startX = startY = -1;
           }
-          createbox(wx, wy, '#00f000');
           endX = wx;
           endY = wy;
         }
+        render();
       }
     }
 
+  });
+
+  window.addEventListener('resize', () => {
+    fitCanvas();
+    render();
   });
 
   draw_blank_maze();

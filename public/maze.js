@@ -9,6 +9,8 @@ let canvas, ctx;
 let panels;
 let fov, fx, fy;
 let maze_triangles;
+let winShown = false;
+let mapPinned = false;
 
 const wall_color = '#c0c0c0';
 const floor_color = '#909090';
@@ -92,36 +94,12 @@ function transform([x,y,z]) {
 }
 
 function draw() {
+  if (!ctx || !player || !panels) {
+    return;
+  }
 
   ctx.fillStyle = "black";
   ctx.fillRect(0,0,canvas.width,canvas.height);
-
-/*
-
-  // area of triangle = 1/2 * (x1(y3-y2) + x2(y1-y3) + x3(y2-y1))
-
-  ctx.lineWidth = 2;
-  for(let t of maze_triangles) {
-    const camVerts = t.verts.map(v => toCameraSpace(v, player));
-    const clipped = clipAgainstNearPlane(camVerts);
-    if (clipped.length < 3) {
-      continue; // too small to draw
-    }
-    const pts = clipped.map(v => project(v));
-    console.log(pts);
-    for(let i=0; i<pts.length; i++) {
-      ctx.beginPath();
-      ctx.moveTo(pts[i][0], pts[i][1]);
-      ctx.lineTo(pts[(i+1)%pts.length][0], pts[(i+1)%pts.length][1]);
-      ctx.strokeStyle = t.edge_colors[i];
-      ctx.stroke();
-    }
-    //ctx.closePath();
-    //ctx.fillStyle = t.fill_color;
-    //ctx.fill();
-  }
-  return;
-*/
 
   const sprite = [
     Rect3d([-0.20,0,0.05],[0.20,0.2,0.15],body_color),
@@ -232,36 +210,80 @@ function wallBetween(x1, y1, x2, y2) {
   return false;
 }
 
+function showWin() {
+  document.getElementById('winBanner').classList.add('show');
+}
+function hideWin() {
+  document.getElementById('winBanner').classList.remove('show');
+}
+function showError(message) {
+  document.getElementById('errorText').textContent = message;
+  document.getElementById('errorBanner').classList.add('show');
+}
+function hideError() {
+  document.getElementById('errorBanner').classList.remove('show');
+}
+
 function move(d) {
+  if (!player || !maze) {
+    return;
+  }
   if(!wallBetween(player.x, player.z, ...player.whats(d))) {
     player.move(d);
     if(Math.floor(player.x) == maze.end_x && Math.floor(player.z) == maze.end_y) {
-      alert("Great job!");
+      if (!winShown) {
+        winShown = true;
+        showWin();
+      }
+    } else {
+      winShown = false;
     }
   draw();
   }
 }
 
 function turn(d) {
+  if (!player) return;
   player.turn(d);
   draw();
 }
 
 function look(d) {
+  if (!player) return;
   player.look(d);
   draw();
 }
 
 function grow() {
+  if (!player) return;
   player.grow();
   draw();
 }
 function shrink() {
+  if (!player) return;
   player.shrink();
   draw();
 }
 
+function setMapVisible(visible) {
+  if (!map) return;
+  const btn = document.getElementById('mapBtn');
+  if (visible) {
+    map.resize();
+    map.draw();
+    map.show();
+  } else {
+    map.hide();
+  }
+  mapPinned = visible;
+  if (btn) btn.setAttribute('aria-pressed', String(visible));
+}
+function toggleMap() {
+  setMapVisible(!mapPinned);
+}
+
 async function populateMazeSelect() {
+  const mazeSelect = document.getElementById('mazeSelect');
   let mazes = await listMazes();
   mazeSelect.length = 1;
   mazes.forEach(m => {
@@ -277,8 +299,14 @@ async function loadMaze(mazeName) {
     maze = await getMazeData(mazeName);
   } catch (err) {
     console.error('Failed to get maze data:', err);
+    showError(`Couldn't load “${mazeName}”. The maze server hiccuped — pick it again in a moment.`);
+    return;
   }
 
+  winShown = false;
+  hideWin();
+  hideError();
+  setMapVisible(false);
   player = new Player(maze.start_x + 0.5, maze.start_y + 0.5, maze.directionRad);
 
   panels = [];
@@ -292,7 +320,7 @@ async function loadMaze(mazeName) {
       } else {
         color = floor_color;
       }
-        
+
       panels.push({
         verts: [
           [x,0,z],
@@ -304,7 +332,7 @@ async function loadMaze(mazeName) {
       });
     }
   }
- 
+
   // horizontal walls
   for(let x=0; x<maze.h.length; x++) {
     for(let z=0; z<=maze.v.length; z++) {
@@ -338,7 +366,7 @@ async function loadMaze(mazeName) {
     }
   }
 
-  maze_triangles = panels.flatMap(panel => 
+  maze_triangles = panels.flatMap(panel =>
     trianglize(panel.verts,"white",panel.color)
   );
 
@@ -358,14 +386,69 @@ async function init() {
 
   let app = document.getElementById('app');
   app.innerHTML = `
-    <canvas id="mazeCanvas"></canvas>
+    <canvas id="mazeCanvas" class="game-canvas"></canvas>
     <canvas id="mapCanvas"></canvas>
     <div id="topbar">
-      <select id="mazeSelect">
-        <option value=""></option>
-      </select>
-      &nbsp;&nbsp;
-      WASD to move, arrows to turn, T/G to grow/shrink, M for map
+      <span class="brand">🌀 Maze</span>
+      <label class="field" for="mazeSelect">
+        <select id="mazeSelect" aria-label="Choose a maze">
+          <option value="">Pick a maze…</option>
+        </select>
+      </label>
+      <a class="btn" href="draw.html" title="Create your own maze">✏️ Create</a>
+    </div>
+    <div class="hint-pill">WASD to move &nbsp;·&nbsp; Arrows to turn &amp; look &nbsp;·&nbsp; T / G grow &amp; shrink &nbsp;·&nbsp; Hold M for map &nbsp;·&nbsp; Drag to look around</div>
+    <div class="touch-controls" aria-label="Touch controls">
+      <div>
+        <div class="pad" role="group" aria-label="Move">
+
+          <span class="spacer"></span>
+          <button class="btn" type="button" data-action="forward" aria-label="Move forward">⬆️</button>
+          <span class="spacer"></span>
+          <button class="btn" type="button" data-action="left" aria-label="Move left">⬅️</button>
+          <span class="pad-label">Move</span>
+          <button class="btn" type="button" data-action="right" aria-label="Move right">➡️</button>
+          <span class="spacer"></span>
+          <button class="btn" type="button" data-action="backward" aria-label="Move backward">⬇️</button>
+          <span class="spacer"></span>
+        </div>
+      </div>
+      <div class="mid-controls">
+        <button class="btn mid-btn" id="mapBtn" type="button" aria-pressed="false" title="Map (M)">🗺️ Map</button>
+        <div class="mid-size">
+          <button class="btn mid-btn" id="growBtn" type="button" title="Grow taller (T)">➕ Grow</button>
+          <button class="btn mid-btn" id="shrinkBtn" type="button" title="Shrink (G)">➖ Shrink</button>
+        </div>
+      </div>
+      <div>
+        <div class="pad" role="group" aria-label="Look and turn">
+          <span class="spacer"></span>
+          <button class="btn" type="button" data-action="look-up" aria-label="Look up">⬆️</button>
+          <span class="spacer"></span>
+          <button class="btn" type="button" data-action="turn-left" aria-label="Turn left">⬅️</button>
+          <span class="pad-label">Look</span>
+          <button class="btn" type="button" data-action="turn-right" aria-label="Turn right">➡️</button>
+          <span class="spacer"></span>
+          <button class="btn" type="button" data-action="look-down" aria-label="Look down">⬇️</button>
+          <span class="spacer"></span>
+        </div>
+      </div>
+    </div>
+    <div class="win-banner" id="winBanner" role="dialog" aria-modal="false" aria-labelledby="winTitle">
+      <div class="win-card">
+        <div class="win-emoji">🎉</div>
+        <h2 id="winTitle">Great job!</h2>
+        <p>You found your way out of the maze.</p>
+        <button class="btn btn-primary" id="winDismissBtn" type="button">Keep exploring</button>
+      </div>
+    </div>
+    <div class="win-banner" id="errorBanner" role="alertdialog" aria-modal="false" aria-labelledby="errorTitle">
+      <div class="win-card">
+        <div class="win-emoji">😵‍💫</div>
+        <h2 id="errorTitle">That maze didn't load</h2>
+        <p id="errorText"></p>
+        <button class="btn btn-primary" id="errorDismissBtn" type="button">OK</button>
+      </div>
     </div>
   `;
 
@@ -373,6 +456,8 @@ async function init() {
   ctx = canvas.getContext('2d');
   fov = 100 * Math.PI / 180;
   resize();
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   await populateMazeSelect();
 
@@ -390,50 +475,108 @@ async function init() {
     }
   });
 
+  document.getElementById('mapBtn').addEventListener('click', () => {
+    if (mazeSelect.value != '') toggleMap();
+  });
+  document.getElementById('growBtn').addEventListener('click', grow);
+  document.getElementById('shrinkBtn').addEventListener('click', shrink);
+  document.getElementById('winDismissBtn').addEventListener('click', hideWin);
+  document.getElementById('errorDismissBtn').addEventListener('click', hideError);
+  document.getElementById('mapCanvas').addEventListener('click', () => setMapVisible(false));
+
+  const actions = {
+    'forward': () => move('forward'),
+    'backward': () => move('backward'),
+    'left': () => move('left'),
+    'right': () => move('right'),
+    'turn-left': () => turn('left'),
+    'turn-right': () => turn('right'),
+    'look-up': () => look('up'),
+    'look-down': () => look('down'),
+  };
+  document.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => actions[btn.dataset.action]());
+  });
+
+  // iOS Safari ignores user-scalable=no; block its pinch gesture event.
+  document.addEventListener('gesturestart', e => e.preventDefault());
+
+  // Drag on the 3D view to turn / look — one step per ~36px of drag,
+  // so a continuous swipe keeps turning. Primary pointer only, so a
+  // second finger (e.g. an attempted pinch) doesn't spin the view.
+  let drag = null;
+  canvas.addEventListener('pointerdown', e => {
+    if (!e.isPrimary) return;
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!drag || !player || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    const STEP = 36;
+    if (Math.abs(dx) >= STEP && Math.abs(dx) >= Math.abs(dy)) {
+      turn(dx > 0 ? 'right' : 'left');
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+    } else if (Math.abs(dy) >= STEP) {
+      look(dy < 0 ? 'up' : 'down');
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+    }
+  });
+  const endDrag = (e) => { if (!drag || e.pointerId === drag.id) drag = null; };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('pointerleave', endDrag);
+
   window.addEventListener("keydown", e => {
-    if(event.code == "ArrowUp") {
+    if(e.code == "ArrowUp") {
       look('up');
-    } else if(event.code == "ArrowDown") {
+    } else if(e.code == "ArrowDown") {
       look('down');
-    } else if(event.code == "ArrowLeft") {
+    } else if(e.code == "ArrowLeft") {
       turn('left');
-    } else if(event.code == "ArrowRight") {
+    } else if(e.code == "ArrowRight") {
       turn('right');
-    } else if(event.code == "KeyW") {
+    } else if(e.code == "KeyW") {
       move('forward');
-    } else if(event.code == "KeyA") {
+    } else if(e.code == "KeyA") {
       move('left');
-    } else if(event.code == "KeyS") {
+    } else if(e.code == "KeyS") {
       move('backward');
-    } else if(event.code == "KeyD") {
+    } else if(e.code == "KeyD") {
       move('right');
-    } else if(event.code == "KeyT") {
+    } else if(e.code == "KeyT") {
       grow();
-    } else if(event.code == "KeyG") {
+    } else if(e.code == "KeyG") {
       shrink();
-    } else if(event.code == "KeyM") {
-      if(event.repeat) {
+    } else if(e.code == "KeyM") {
+      if(e.repeat) {
         return;
       }
-      if(mazeSelect.value != '') {
+      if(mazeSelect.value != '' && map) {
+        map.resize();
+        map.draw();
         map.show();
       }
     }
   });
 
-  window.addEventListener("keyup", function(event) {
-    if(event.code == "KeyM") {
-      if(map) {
+  window.addEventListener("keyup", function(e) {
+    if(e.code == "KeyM") {
+      if(map && !mapPinned) {
         map.hide();
       }
     }
   });
 
-  window.addEventListener("resize", function(event) {
+  window.addEventListener("resize", function() {
     resize();
     draw();
-    map.resize();
-    map.draw();
+    if (map) {
+      map.resize();
+      map.draw();
+    }
   });
 
 }
