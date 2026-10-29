@@ -1,4 +1,4 @@
-import Maze from './Maze.js?v=3.0.0';
+import Maze from './Maze.js?v=3.0.1';
 
 export default class Map {
   constructor(maze,canvas,start_color,end_color) {

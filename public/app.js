@@ -10,10 +10,10 @@
 // state is the editor's dirty flag, so the version check never
 // force-reloads over unsaved work.
 
-import { mount as mountPlay, unmount as unmountPlay } from './views/play.js?v=3.0.0';
-import { mount as mountCreate, unmount as unmountCreate } from './views/create.js?v=3.0.0';
-import { mount as mountSettings, unmount as unmountSettings } from './views/settings.js?v=3.0.0';
-import { initAuth, getUser, renderSignIn, signOut } from './Auth.js?v=3.0.0';
+import { mount as mountPlay, unmount as unmountPlay } from './views/play.js?v=3.0.1';
+import { mount as mountCreate, unmount as unmountCreate } from './views/create.js?v=3.0.1';
+import { mount as mountSettings, unmount as unmountSettings } from './views/settings.js?v=3.0.1';
+import { initAuth, getUser, renderSignIn, signOut } from './Auth.js?v=3.0.1';
 
 const shared = {
   editorDirty: false,
