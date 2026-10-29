@@ -5,20 +5,24 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=4.0.2';
-import Maze from '../Maze.js?v=4.0.2';
-import Player from '../Player.js?v=4.0.2';
-import Map from '../Map.js?v=4.0.2';
-import { Rect3d } from "../Geometry.js?v=4.0.2";
-import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.0.2';
-import * as Multiplayer from '../Multiplayer.js?v=4.0.2';
-import { getUser } from '../Auth.js?v=4.0.2';
+import { getMazeData, listMazes } from '../MazeDB.js?v=4.0.3';
+import Maze from '../Maze.js?v=4.0.3';
+import Player from '../Player.js?v=4.0.3';
+import Map from '../Map.js?v=4.0.3';
+import { Rect3d } from "../Geometry.js?v=4.0.3";
+import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.0.3';
+import * as Multiplayer from '../Multiplayer.js?v=4.0.3';
+import { getUser } from '../Auth.js?v=4.0.3';
 
 let maze, player, map;
 let canvas, ctx;
 let panels;
 let fov, fx, fy;
 let winShown = false;
+
+// How far the self-view figure is shifted back so the camera sits
+// just in front of the face (see draw()).
+const EYE_FORWARD = 0.135;
 // Z-buffer render targets, (re)allocated when the canvas size changes.
 let offCanvas = null, offCtx = null, imgData = null, pix32 = null, zbuf = null;
 // NOTE: a plain object, not a Map — the imported Maze Map class
@@ -166,9 +170,17 @@ function draw() {
   clearFrame(pix32, zbuf);
 
   // Own body: the same figure everyone else sees (own avatar color,
-  // own scale), minus the head, pitch-gated (see personParts).
+  // own scale), minus the head, pitch-gated (see personParts) — but
+  // drawn shifted backward by EYE_FORWARD (scaled by Grow/Shrink,
+  // like the figure itself), as if the eyes stick out from the
+  // front of the face: the face front (0.11 ahead of the figure's
+  // center) ends up just behind the camera while the leg and torso
+  // fronts (0.16 / 0.19) stay just ahead of it, so looking down
+  // shows the FRONT of the body instead of the box interiors.
+  // Self view only; everyone else sees the figure at its true spot.
   const me = getUser();
-  const myParts = personParts((me && me.avatar_color) || body_color, player.y / 0.5);
+  const myScale = player.y / 0.5;
+  const myParts = personParts((me && me.avatar_color) || body_color, myScale);
   const sprite = [];
   if (player.pitch < -0.28) {
     sprite.push(myParts.legs);
@@ -176,10 +188,11 @@ function draw() {
   if (player.pitch < -0.55) {
     sprite.push(myParts.torso);
   }
+  const eyeShift = EYE_FORWARD * myScale;
   const everything = [
     ...panels,
     ...sprite.flat(1).map(shape => ({
-      verts: shape.verts.map(transform),
+      verts: shape.verts.map(([x, y, z]) => transform([x - eyeShift, y, z])),
       color: shape.color
     })),
     ...Multiplayer.getOthers().flatMap(personPanels)
