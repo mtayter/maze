@@ -5,14 +5,14 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=4.1.5';
-import Maze from '../Maze.js?v=4.1.5';
-import Player from '../Player.js?v=4.1.5';
-import Map from '../Map.js?v=4.1.5';
-import { Rect3d } from "../Geometry.js?v=4.1.5";
-import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.1.5';
-import * as Multiplayer from '../Multiplayer.js?v=4.1.5';
-import { getUser } from '../Auth.js?v=4.1.5';
+import { getMazeData, listMazes } from '../MazeDB.js?v=4.1.6';
+import Maze from '../Maze.js?v=4.1.6';
+import Player from '../Player.js?v=4.1.6';
+import Map from '../Map.js?v=4.1.6';
+import { Rect3d } from "../Geometry.js?v=4.1.6";
+import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.1.6';
+import * as Multiplayer from '../Multiplayer.js?v=4.1.6';
+import { getUser } from '../Auth.js?v=4.1.6';
 
 let maze, player, map;
 let canvas, ctx;
@@ -23,6 +23,15 @@ let winShown = false;
 // How far the self-view figure is shifted back so the camera sits
 // just in front of the face (see draw()).
 const EYE_FORWARD = 0.135;
+// The self body sits almost against the camera — its front is only
+// EYE_FORWARD - 0.11 = 0.025 ahead of the eye — so the standard 0.1
+// near plane eats the front of the torso when looking down (the
+// clipped depth of the front face is governed by how far below the
+// eye each point is, and the strip near eye level is always within
+// 0.1), opening a hole you can see inside the body through. The
+// self body is therefore clipped with this much smaller near
+// plane; maze walls and other players never get that close.
+const SELF_NEAR = 0.01;
 // Z-buffer render targets, (re)allocated when the canvas size changes.
 let offCanvas = null, offCtx = null, imgData = null, pix32 = null, zbuf = null;
 // NOTE: a plain object, not a Map — the imported Maze Map class
@@ -134,7 +143,7 @@ function myPos() {
 // direction and local +z onto their left, so x is the figure's
 // front-to-back thickness and z its left-to-right width. The wide
 // dimensions (legs stance 0.32, shoulders 0.38) run along z; the
-// thin ones (0.18 / 0.22) along x. (Before 4.1.5 these were
+// thin ones (0.18 / 0.22) along x. (Before 4.1.6 these were
 // swapped, which made the figure read as rotated 90°: narrow from
 // the front, wide from the side. The legs were also a single slab.)
 function personParts(color, s) {
@@ -209,7 +218,8 @@ function draw() {
     ...panels,
     ...sprite.flat(1).map(shape => ({
       verts: shape.verts.map(([x, y, z]) => transform([x - eyeShift, y, z])),
-      color: shape.color
+      color: shape.color,
+      near: SELF_NEAR
     })),
     ...Multiplayer.getOthers().flatMap(personPanels)
   ];
@@ -220,7 +230,7 @@ function draw() {
   // of edge painting so quads don't grow fake seams.
   for (const panel of everything) {
     const camVerts = panel.verts.map(v => toCameraSpace(v, player));
-    const clipped = clipAgainstNearPlane(camVerts);
+    const clipped = clipAgainstNearPlane(camVerts, panel.near ?? 0.1);
     if (clipped.length < 3) {
       continue; // behind the camera / too small to draw
     }
