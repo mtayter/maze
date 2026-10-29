@@ -533,21 +533,30 @@ app.get('/app/maze/admin/logins', requireAuth, requireAdmin, async (req, res) =>
     const logins = await withDb(async (db) => {
       const [rows] = await db.execute(
         `SELECT u.name, u.email, u.avatar_color, s.user_id,
-                s.created_at AS login_at, s.ended_at AS logout_at
+                s.created_at AS login_at, s.ended_at AS logout_at,
+                s.expires_at
          FROM session s JOIN user u ON u.user_id = s.user_id
          ORDER BY s.created_at DESC`);
       return rows;
     });
+    // Avatar color and current maze are live state, not history:
+    // they are read from the user row / presence rooms at display
+    // time (never stored per login) and are only shown on rows whose
+    // session is currently logged in — not ended and not expired.
+    const nowStr = utcStr(new Date());
     res.json({
       ok: true,
-      logins: logins.map((row) => ({
-        name: row.name,
-        email: row.email,
-        avatar_color: row.avatar_color,
-        current_maze: currentMaze[row.user_id] || null,
-        login_at: row.login_at,
-        logout_at: row.logout_at,
-      })),
+      logins: logins.map((row) => {
+        const active = !row.logout_at && row.expires_at > nowStr;
+        return {
+          name: row.name,
+          email: row.email,
+          avatar_color: active ? row.avatar_color : null,
+          current_maze: active ? (currentMaze[row.user_id] || null) : null,
+          login_at: row.login_at,
+          logout_at: row.logout_at,
+        };
+      }),
     });
   } catch (err) {
     console.error('Admin logins error:', err);

@@ -46,11 +46,15 @@ async function load() {
       tr.appendChild(cell(row.name || ''));
       tr.appendChild(cell(row.email || ''));
       const avatar = document.createElement('td');
-      const dot = document.createElement('span');
-      dot.className = 'admin-dot';
-      dot.style.background = row.avatar_color || '#888888';
-      avatar.appendChild(dot);
-      avatar.appendChild(document.createTextNode(row.avatar_color || ''));
+      if (row.avatar_color) {
+        const dot = document.createElement('span');
+        dot.className = 'admin-dot';
+        dot.style.background = row.avatar_color;
+        avatar.appendChild(dot);
+        avatar.appendChild(document.createTextNode(row.avatar_color));
+      } else {
+        avatar.textContent = '—';
+      }
       tr.appendChild(avatar);
       tr.appendChild(cell(row.current_maze || '—'));
       tr.appendChild(cell(fmtTime(row.login_at)));
