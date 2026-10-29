@@ -5,14 +5,14 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=4.0.1';
-import Maze from '../Maze.js?v=4.0.1';
-import Player from '../Player.js?v=4.0.1';
-import Map from '../Map.js?v=4.0.1';
-import { Rect3d } from "../Geometry.js?v=4.0.1";
-import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.0.1';
-import * as Multiplayer from '../Multiplayer.js?v=4.0.1';
-import { getUser } from '../Auth.js?v=4.0.1';
+import { getMazeData, listMazes } from '../MazeDB.js?v=4.0.2';
+import Maze from '../Maze.js?v=4.0.2';
+import Player from '../Player.js?v=4.0.2';
+import Map from '../Map.js?v=4.0.2';
+import { Rect3d } from "../Geometry.js?v=4.0.2";
+import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.0.2';
+import * as Multiplayer from '../Multiplayer.js?v=4.0.2';
+import { getUser } from '../Auth.js?v=4.0.2';
 
 let maze, player, map;
 let canvas, ctx;
@@ -117,19 +117,27 @@ function myPos() {
   return { x: player.x, z: player.z, yaw: player.yaw, y: player.y };
 }
 
-// Another player, drawn as a little standing figure in their avatar
-// color (legs, torso, lighter head), rotated to their facing. The
-// figure's height scales with their Grow/Shrink level (their eye
-// height relative to the standard 0.5), like the player's own body.
+// The one and only player figure: legs, torso, and a lighter head,
+// in an avatar color, scaled by Grow/Shrink level (eye height
+// relative to the standard 0.5). Other players are drawn from all
+// three parts; your own view uses the same parts (minus the head —
+// your camera sits in it), pitch-gated so the forward view stays
+// clear: legs appear once you look down a couple of steps, the
+// torso a step further. Because the figure scales with eye
+// height, those angles are the same at every size.
+function personParts(color, s) {
+  return {
+    legs: Rect3d([-0.16, 0, -0.09], [0.16, 0.45 * s, 0.09], color),
+    torso: Rect3d([-0.19, 0.45 * s, -0.11], [0.19, 0.8 * s, 0.11], color),
+    head: Rect3d([-0.11, 0.8 * s, -0.11], [0.11, 1.0 * s, 0.11], lighten(color)),
+  };
+}
+
 function personPanels(p) {
   const color = p.avatar_color || '#888888';
   const s = (typeof p.y === 'number' ? p.y : 0.5) / 0.5;
-  const boxes = [
-    Rect3d([-0.16, 0, -0.09], [0.16, 0.45 * s, 0.09], color),
-    Rect3d([-0.19, 0.45 * s, -0.11], [0.19, 0.8 * s, 0.11], color),
-    Rect3d([-0.11, 0.8 * s, -0.11], [0.11, 1.0 * s, 0.11], lighten(color)),
-  ];
-  return boxes.flat(1).map(shape => ({
+  const parts = personParts(color, s);
+  return [parts.legs, parts.torso, parts.head].flat(1).map(shape => ({
     verts: shape.verts.map(v => transformFor(v, p.x, p.z, p.yaw)),
     color: shape.color,
   }));
@@ -157,13 +165,17 @@ function draw() {
   const H = canvas.height;
   clearFrame(pix32, zbuf);
 
-  const sprite = [
-    Rect3d([-0.20,0,0.05],[0.20,0.2,0.15],body_color),
-    Rect3d([-0.20,0,-0.05],[0.20,0.2,-0.15],body_color),
-    Rect3d([-0.20,0.2,0.08],[-0.16,player.y*0.50,0.12],body_color),
-    Rect3d([-0.20,0.2,-0.08],[-0.16,player.y*0.50,-0.12],body_color),
-    Rect3d([-0.20,player.y*0.50,-0.15],[-0.16,player.y,0.15],body_color)
-  ];
+  // Own body: the same figure everyone else sees (own avatar color,
+  // own scale), minus the head, pitch-gated (see personParts).
+  const me = getUser();
+  const myParts = personParts((me && me.avatar_color) || body_color, player.y / 0.5);
+  const sprite = [];
+  if (player.pitch < -0.28) {
+    sprite.push(myParts.legs);
+  }
+  if (player.pitch < -0.55) {
+    sprite.push(myParts.torso);
+  }
   const everything = [
     ...panels,
     ...sprite.flat(1).map(shape => ({
