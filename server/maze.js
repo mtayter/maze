@@ -331,6 +331,129 @@ app.post('/app/maze/settings', requireAuth, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Multiplayer presence (roadmap phase 4). Ephemeral by design: room
+// state lives in memory only — who is standing in which maze is not
+// worth a database write. Clients POST their position on every move
+// (plus a heartbeat), and subscribe to the room's roster over SSE
+// (GET /events). Players who go silent are swept after the TTL.
+// ---------------------------------------------------------------------------
+
+const PRESENCE_TTL_MS = 30000;
+const rooms = new Map(); // maze name -> { players: Map, subs: Set }
+
+function roomFor(name) {
+  let room = rooms.get(name);
+  if (!room) {
+    room = { players: new Map(), subs: new Set() };
+    rooms.set(name, room);
+  }
+  return room;
+}
+
+function rosterOf(room) {
+  return [...room.players.values()].map((p) => ({
+    user_id: p.user_id,
+    name: p.name,
+    avatar_color: p.avatar_color,
+    x: p.x,
+    z: p.z,
+    yaw: p.yaw,
+  }));
+}
+
+function broadcastPresence(name) {
+  const room = rooms.get(name);
+  if (!room) return;
+  const data = JSON.stringify(rosterOf(room));
+  for (const res of room.subs) {
+    try {
+      res.write(`event: players\ndata: ${data}\n\n`);
+    } catch (err) {
+      // Dead subscriber; its close handler removes it.
+    }
+  }
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [name, room] of rooms) {
+    let changed = false;
+    for (const [userId, p] of room.players) {
+      if (now - p.updatedAt > PRESENCE_TTL_MS) {
+        room.players.delete(userId);
+        changed = true;
+      }
+    }
+    if (changed) {
+      broadcastPresence(name);
+    }
+    if (room.players.size === 0 && room.subs.size === 0) {
+      rooms.delete(name);
+    }
+  }
+}, 5000).unref();
+
+app.post('/app/maze/presence', requireAuth, (req, res) => {
+  const body = req.body || {};
+  if (typeof body.maze !== 'string' || !body.maze) {
+    res.status(400).json({ ok: false, error: 'maze required' });
+    return;
+  }
+  const room = roomFor(body.maze);
+  if (body.leave) {
+    if (room.players.delete(req.user.user_id)) {
+      broadcastPresence(body.maze);
+    }
+    res.json({ ok: true, players: rosterOf(room) });
+    return;
+  }
+  const { x, z, yaw } = body;
+  if (![x, z, yaw].every((n) => typeof n === 'number' && Number.isFinite(n))) {
+    res.status(400).json({ ok: false, error: 'x, z, yaw must be numbers' });
+    return;
+  }
+  const prev = room.players.get(req.user.user_id);
+  room.players.set(req.user.user_id, {
+    user_id: req.user.user_id,
+    name: req.user.name,
+    avatar_color: req.user.avatar_color,
+    x, z, yaw,
+    updatedAt: Date.now(),
+  });
+  if (!prev || prev.x !== x || prev.z !== z || prev.yaw !== yaw) {
+    broadcastPresence(body.maze);
+  }
+  res.json({ ok: true, players: rosterOf(room) });
+});
+
+app.get('/app/maze/events', requireAuth, (req, res) => {
+  const maze = req.query.maze;
+  if (typeof maze !== 'string' || !maze) {
+    res.status(400).json({ error: 'maze required' });
+    return;
+  }
+  const room = roomFor(maze);
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  res.write(`event: players\ndata: ${JSON.stringify(rosterOf(room))}\n\n`);
+  room.subs.add(res);
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': hb\n\n');
+    } catch (err) {
+      // Closed connections are removed by the close handler.
+    }
+  }, 15000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    room.subs.delete(res);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Maze endpoints (session required).
 // ---------------------------------------------------------------------------
 

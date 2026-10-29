@@ -161,6 +161,15 @@ your copy. Mazes created before SSO have `user_id = NULL` and are
 claimed by `MAZE_OWNER_EMAIL` on that user's first sign-in. Players
 pick an avatar color on the settings page (`user.avatar_color`).
 
+## Multiplayer
+
+Players in the same maze see each other in their avatar colors.
+Presence is kept in server memory only: clients POST position
+updates to `/app/maze/presence` and receive the room roster over
+Server-Sent Events at `/app/maze/events`. Other players block
+movement into their cell, and spawn collisions resolve to the
+closest free cell.
+
 ## Database schema
 
 Three tables (`schema.sql`), all singular. `user.user_id` is the

@@ -73,11 +73,23 @@ screen until signed in.
   errors on blur and pulls focus back until a different name is
   entered.
 
-## 4. Multiplayer
+## 4. Multiplayer ✅ (2026-10-29)
 
-- Players in the same maze see each other, rendered in their avatar
-  colors.
-- Other players are part of collision: you can't move into a cell
-  another player occupies.
-- Spawn collision: if your start cell is occupied when you load a
-  maze, you spawn at the closest open cell instead.
+Presence is ephemeral and lives in server memory — no database
+writes. Clients POST their position to `/app/maze/presence` on every
+move and turn (plus a 5-second heartbeat) and subscribe to the room
+roster over Server-Sent Events at `/app/maze/events?maze=<name>`;
+both endpoints require the session. The server broadcasts the roster
+on every change and sweeps players silent for 30 seconds. Leaving
+sends an explicit goodbye so cells free up immediately.
+
+- Players in the same maze see each other as little standing
+  figures (legs, torso, lighter head) in their avatar colors,
+  rotated to their facing and depth-tested by the same z-buffer
+  renderer as the walls.
+- Other players are part of collision: a move whose target cell is
+  occupied is blocked, exactly like a wall bump.
+- Spawn collision: joining reports your spawn position and reads
+  back the roster; if your cell is taken, you relocate to the
+  closest free cell (Manhattan rings) before anyone sees you
+  standing inside another player.

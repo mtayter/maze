@@ -5,12 +5,14 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=3.0.2';
-import Maze from '../Maze.js?v=3.0.2';
-import Player from '../Player.js?v=3.0.2';
-import Map from '../Map.js?v=3.0.2';
-import { Rect3d } from "../Geometry.js?v=3.0.2";
-import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=3.0.2';
+import { getMazeData, listMazes } from '../MazeDB.js?v=4.0.0';
+import Maze from '../Maze.js?v=4.0.0';
+import Player from '../Player.js?v=4.0.0';
+import Map from '../Map.js?v=4.0.0';
+import { Rect3d } from "../Geometry.js?v=4.0.0";
+import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.0.0';
+import * as Multiplayer from '../Multiplayer.js?v=4.0.0';
+import { getUser } from '../Auth.js?v=4.0.0';
 
 let maze, player, map;
 let canvas, ctx;
@@ -91,11 +93,39 @@ function clipAgainstNearPlane(verts, near=0.1) {
   return clipped;
 }
 
-function transform([x,y,z]) {
-  // rotate feet and legs to match player's angle and move to player's location
-  const rx = x * Math.cos(player.yaw) - z * Math.sin(player.yaw);
-  const rz = x * Math.sin(player.yaw) + z * Math.cos(player.yaw);
-  return [player.x + rx, y, player.z + rz];
+function transformFor([x, y, z], px, pz, yaw) {
+  // rotate a body-local point to match an angle and move to a location
+  const rx = x * Math.cos(yaw) - z * Math.sin(yaw);
+  const rz = x * Math.sin(yaw) + z * Math.cos(yaw);
+  return [px + rx, y, pz + rz];
+}
+
+function transform(v) {
+  return transformFor(v, player.x, player.z, player.yaw);
+}
+
+function lighten(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c) => Math.round(c + (255 - c) * 0.55);
+  const r = mix((n >> 16) & 255);
+  const g = mix((n >> 8) & 255);
+  const b = mix(n & 255);
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
+
+// Another player, drawn as a little standing figure in their avatar
+// color (legs, torso, lighter head), rotated to their facing.
+function personPanels(p) {
+  const color = p.avatar_color || '#888888';
+  const boxes = [
+    Rect3d([-0.16, 0, -0.09], [0.16, 0.45, 0.09], color),
+    Rect3d([-0.19, 0.45, -0.11], [0.19, 0.8, 0.11], color),
+    Rect3d([-0.11, 0.8, -0.11], [0.11, 1.0, 0.11], lighten(color)),
+  ];
+  return boxes.flat(1).map(shape => ({
+    verts: shape.verts.map(v => transformFor(v, p.x, p.z, p.yaw)),
+    color: shape.color,
+  }));
 }
 
 function ensureBuffers() {
@@ -132,7 +162,8 @@ function draw() {
     ...sprite.flat(1).map(shape => ({
       verts: shape.verts.map(transform),
       color: shape.color
-    }))
+    })),
+    ...Multiplayer.getOthers().flatMap(personPanels)
   ];
 
   // Z-buffer: draw order no longer matters; each panel is clipped to
@@ -242,23 +273,33 @@ function move(d) {
   if (!player || !maze) {
     return;
   }
-  if(!wallBetween(player.x, player.z, ...player.whats(d))) {
-    player.move(d);
-    if(Math.floor(player.x) == maze.end_x && Math.floor(player.z) == maze.end_y) {
-      if (!winShown) {
-        winShown = true;
-        showWin();
-      }
-    } else {
-      winShown = false;
-    }
-  draw();
+  const [tx, tz] = player.whats(d);
+  if (wallBetween(player.x, player.z, tx, tz)) {
+    return;
   }
+  // Other players are solid: their cell can't be entered.
+  const occupied = Multiplayer.getOthers().some(p =>
+    Math.floor(p.x) === Math.floor(tx) && Math.floor(p.z) === Math.floor(tz));
+  if (occupied) {
+    return;
+  }
+  player.move(d);
+  Multiplayer.update(player.x, player.z, player.yaw);
+  if(Math.floor(player.x) == maze.end_x && Math.floor(player.z) == maze.end_y) {
+    if (!winShown) {
+      winShown = true;
+      showWin();
+    }
+  } else {
+    winShown = false;
+  }
+  draw();
 }
 
 function turn(d) {
   if (!player) return;
   player.turn(d);
+  Multiplayer.update(player.x, player.z, player.yaw);
   draw();
 }
 
@@ -395,6 +436,42 @@ async function loadMaze(mazeName) {
   draw();
   map = new Map(maze,document.getElementById('mapCanvas'),start_color,end_color);
 
+  activeMaze = mazeName;
+  joinMultiplayer(mazeName);
+}
+
+// Multiplayer session for the loaded maze. Joining reports our spawn
+// position; the roster that comes back settles spawn collisions: if
+// someone already stands on our cell, we move to the closest free
+// one. Later roster changes simply redraw (draw reads the roster).
+let activeMaze = '';
+let joinSeq = 0;
+
+async function joinMultiplayer(mazeName) {
+  const seq = ++joinSeq;
+  let players;
+  try {
+    players = await Multiplayer.join(mazeName, player.x, player.z, player.yaw, () => draw());
+  } catch (err) {
+    console.error('Multiplayer join failed:', err);
+    return;
+  }
+  if (seq !== joinSeq || mazeName !== activeMaze || !player) {
+    return; // a newer load superseded this join
+  }
+  const me = getUser();
+  const occupied = (players || [])
+    .filter(p => !me || p.user_id !== me.user_id)
+    .map(p => [Math.floor(p.x), Math.floor(p.z)]);
+  const cellX = Math.floor(player.x);
+  const cellZ = Math.floor(player.z);
+  const spot = Multiplayer.findSpawn(occupied, cellX, cellZ, maze.h.length, maze.v.length);
+  if (spot.x !== cellX || spot.z !== cellZ) {
+    player.x = spot.x + 0.5;
+    player.z = spot.z + 0.5;
+    draw();
+  }
+  Multiplayer.update(player.x, player.z, player.yaw);
 }
 
 function resize() {
@@ -613,6 +690,9 @@ export async function mount(el, shared) {
 }
 
 export function unmount() {
+  Multiplayer.leave();
+  activeMaze = '';
+  joinSeq++;
   if (player && lastMaze) {
     restoreState = {
       maze: lastMaze,
