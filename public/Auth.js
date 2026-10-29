@@ -142,7 +142,7 @@ export function renderSignIn(el) {
   }
   el.innerHTML = `
     <div class="signin-card">
-      <div class="win-emoji">🌀</div>
+      <img class="signin-icon" src="maze-icon.svg" alt="">
       <h2>Welcome to Maze</h2>
       <p>Sign in with Google to play and create mazes.</p>
       <div id="ssoBox"></div>

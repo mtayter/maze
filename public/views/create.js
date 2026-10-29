@@ -3,8 +3,8 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=3.0.1';
-import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js?v=3.0.1';
+import Maze from '../Maze.js?v=3.0.2';
+import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js?v=3.0.2';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -23,17 +23,54 @@ let savedDirection = 'n';
 // save over your own mazes; others' mazes save as copies (new name).
 let loadedMine = true;
 let loadedOwnerName = '';
+// name -> { owner_name, mine } for every maze, rebuilt on list loads.
+let mazeOwners = {};
+// Name field value when it gained focus (blur-error guard).
+let nameAtFocus = null;
 
 function updateOwnerNote() {
   const note = document.getElementById('ownerNote');
   if (!note) return;
-  if (!lastLoaded) {
+  if (!lastLoaded || loadedMine) {
     note.textContent = '';
-  } else if (loadedMine) {
-    note.textContent = '👤 Your maze';
   } else {
-    note.textContent = `👤 By ${loadedOwnerName || 'another player'} — saving needs a new name (saves as your copy)`;
+    note.textContent = `👤 By ${loadedOwnerName || 'another player'} — rename to save your copy`;
   }
+}
+
+// Save availability, driven by the name field: blank names keep Save
+// enabled (clicking explains a name is needed); the loaded maze's own
+// name is saveable only when the maze is yours; any other existing
+// name is not saveable; a fresh name is.
+function nameStatus() {
+  const input = document.getElementById('name');
+  if (!input) return 'blank';
+  const name = input.value.trim();
+  if (name === '') return 'blank';
+  if (name === lastLoaded) return loadedMine ? 'own' : 'theirs';
+  if (Object.prototype.hasOwnProperty.call(mazeOwners, name)) return 'taken';
+  return 'free';
+}
+
+function refreshSaveState() {
+  const saveBtn = document.getElementById('saveBtn');
+  if (!saveBtn) return;
+  const status = nameStatus();
+  saveBtn.disabled = status === 'theirs' || status === 'taken';
+}
+
+function showNameError(message) {
+  const error = document.getElementById('nameError');
+  const input = document.getElementById('name');
+  if (error) error.textContent = message;
+  if (input) input.classList.add('invalid');
+}
+
+function clearNameError() {
+  const error = document.getElementById('nameError');
+  const input = document.getElementById('name');
+  if (error) error.textContent = '';
+  if (input) input.classList.remove('invalid');
 }
 
 function setDirty(dirty) {
@@ -83,6 +120,8 @@ async function save_maze() {
   await populateMazeSelect();
   document.querySelector('#mazeSelect').value = new_maze;
   updateOwnerNote();
+  clearNameError();
+  refreshSaveState();
 }
 
 function x(x) {
@@ -174,6 +213,8 @@ function draw_blank_maze() {
   setDirty(false);
   render();
   updateOwnerNote();
+  clearNameError();
+  refreshSaveState();
 }
 
 function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, direction, ownerName, mine) {
@@ -203,15 +244,22 @@ function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, di
   setDirty(false);
   render();
   updateOwnerNote();
+  clearNameError();
+  refreshSaveState();
 }
 
 async function populateMazeSelect() {
   const mazeSelect = document.getElementById('mazeSelect');
   let mazes = await listMazes();
+  mazeOwners = {};
+  mazes.forEach(maze => {
+    mazeOwners[maze.name] = { owner_name: maze.owner_name, mine: maze.mine };
+  });
   mazeSelect.length = 1;
   mazes.forEach(maze => {
     mazeSelect.add(new Option(maze.name, maze.name));
   });
+  refreshSaveState();
 }
 
 function fitCanvas() {
@@ -268,6 +316,7 @@ export async function mount(el, shared) {
         <span class="group-label">Name</span>
         <label class="field"><input type="text" id="name" placeholder="Maze name" size="12"></label>
         <button class="btn btn-primary" id="saveBtn" type="button">💾 Save</button>
+        <span class="name-error" id="nameError" role="alert"></span>
       </div>
     </header>
     <div class="canvas-wrap" id="canvasWrap">
@@ -284,6 +333,26 @@ export async function mount(el, shared) {
 
   saveBtn.addEventListener('click', () => {
     save_maze();
+  }, { signal });
+
+  // Save availability follows the name field: recheck on every edit,
+  // and a name typed over an existing maze errors on blur and pulls
+  // focus back until a different name is entered.
+  const nameInput = document.getElementById('name');
+  nameInput.addEventListener('focus', () => {
+    nameAtFocus = nameInput.value;
+  }, { signal });
+  nameInput.addEventListener('input', () => {
+    clearNameError();
+    refreshSaveState();
+  }, { signal });
+  nameInput.addEventListener('blur', () => {
+    if (nameStatus() === 'taken' && nameInput.value !== nameAtFocus) {
+      showNameError(`“${nameInput.value.trim()}” already exists — enter a different name.`);
+      refreshSaveState();
+      nameInput.focus();
+      nameInput.select();
+    }
   }, { signal });
 
   document.querySelectorAll('input[name="selectorRadio"]').forEach(radio => {
@@ -324,6 +393,7 @@ export async function mount(el, shared) {
     mazeSelect.value = lastLoaded;
   }
   updateOwnerNote();
+  refreshSaveState();
 
   mazeSelect.addEventListener('change', async () => {
     if(mazeSelect.value != '') {

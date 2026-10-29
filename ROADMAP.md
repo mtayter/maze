@@ -64,6 +64,14 @@ screen until signed in.
   saved on their `user` row (used by multiplayer, phase 4). The
   shell shows your photo, first name, and avatar-color dot, with
   sign-out.
+- Editor save availability follows the name field (owner's
+  refinement, 2026-10-29): Save is disabled whenever the current
+  name isn't saveable by the signed-in user — someone else's maze
+  under its own name, or any already-taken name — and re-enables
+  when the name is changed to a free one. A blank name keeps Save
+  enabled; clicking explains a name is needed. Typing a taken name
+  errors on blur and pulls focus back until a different name is
+  entered.
 
 ## 4. Multiplayer
 

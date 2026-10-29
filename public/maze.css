@@ -241,6 +241,30 @@ body.signed-out .shell-nav { display: none; }
   line-height: 1.35;
 }
 
+/* Editor name-taken error (under the Name field) */
+.name-error {
+  flex-basis: 100%;
+  color: #dc2626;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.name-error:empty { display: none; }
+#name.invalid {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+}
+
+/* Maze brand icon (replaces the spiral) */
+.brand-icon {
+  width: 26px;
+  height: 26px;
+  vertical-align: -6px;
+}
+.signin-icon {
+  width: 72px;
+  height: 72px;
+}
+
 #view {
   flex: 1 1 auto;
   position: relative;

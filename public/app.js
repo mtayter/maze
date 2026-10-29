@@ -10,17 +10,17 @@
 // state is the editor's dirty flag, so the version check never
 // force-reloads over unsaved work.
 
-import { mount as mountPlay, unmount as unmountPlay } from './views/play.js?v=3.0.1';
-import { mount as mountCreate, unmount as unmountCreate } from './views/create.js?v=3.0.1';
-import { mount as mountSettings, unmount as unmountSettings } from './views/settings.js?v=3.0.1';
-import { initAuth, getUser, renderSignIn, signOut } from './Auth.js?v=3.0.1';
+import { mount as mountPlay, unmount as unmountPlay } from './views/play.js?v=3.0.2';
+import { mount as mountCreate, unmount as unmountCreate } from './views/create.js?v=3.0.2';
+import { mount as mountSettings, unmount as unmountSettings } from './views/settings.js?v=3.0.2';
+import { initAuth, getUser, renderSignIn, signOut } from './Auth.js?v=3.0.2';
 
 const shared = {
   editorDirty: false,
 };
 
 const VIEWS = {
-  play: { mount: mountPlay, unmount: unmountPlay, title: 'Do Maze 🌀', nav: 'navPlay' },
+  play: { mount: mountPlay, unmount: unmountPlay, title: 'Do Maze', nav: 'navPlay' },
   create: { mount: mountCreate, unmount: unmountCreate, title: 'Create Maze ✏️', nav: 'navCreate' },
   settings: { mount: mountSettings, unmount: unmountSettings, title: 'Settings ⚙️', nav: 'navSettings' },
 };
@@ -62,7 +62,7 @@ function showSignIn() {
     VIEWS[currentRoute].unmount();
     currentRoute = null;
   }
-  document.title = 'Maze 🌀 — Sign in';
+  document.title = 'Maze — Sign in';
   renderSignIn(document.getElementById('view'));
 }
 

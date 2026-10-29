@@ -5,12 +5,12 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=3.0.1';
-import Maze from '../Maze.js?v=3.0.1';
-import Player from '../Player.js?v=3.0.1';
-import Map from '../Map.js?v=3.0.1';
-import { Rect3d } from "../Geometry.js?v=3.0.1";
-import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=3.0.1';
+import { getMazeData, listMazes } from '../MazeDB.js?v=3.0.2';
+import Maze from '../Maze.js?v=3.0.2';
+import Player from '../Player.js?v=3.0.2';
+import Map from '../Map.js?v=3.0.2';
+import { Rect3d } from "../Geometry.js?v=3.0.2";
+import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=3.0.2';
 
 let maze, player, map;
 let canvas, ctx;
