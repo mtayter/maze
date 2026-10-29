@@ -210,7 +210,7 @@ canvas.game-canvas {
   z-index: 9;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(216px + var(--safe-bottom));
+  bottom: calc(12px + var(--safe-bottom));
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 999px;
@@ -233,7 +233,7 @@ canvas.game-canvas {
   left: calc(12px + var(--safe-left));
   right: calc(12px + var(--safe-right));
   bottom: calc(12px + var(--safe-bottom));
-  display: flex;
+  display: none;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
@@ -285,7 +285,10 @@ canvas.game-canvas {
   text-align: center;
 }
 
-@media (pointer: coarse) {
+/* On-screen controls are for touch layouts only; desktop gets the
+   keyboard + the hint pill along the bottom instead. */
+@media (pointer: coarse), (max-width: 900px) {
+  .touch-controls { display: flex; }
   .hint-pill { display: none; }
 }
 
