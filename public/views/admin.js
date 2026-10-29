@@ -51,7 +51,6 @@ async function load() {
         dot.className = 'admin-dot';
         dot.style.background = row.avatar_color;
         avatar.appendChild(dot);
-        avatar.appendChild(document.createTextNode(row.avatar_color));
       } else {
         avatar.textContent = '—';
       }
