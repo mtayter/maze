@@ -11,6 +11,14 @@ let h = null, v = null, selector = "walls";
 let startX = -1, startY = -1, endX = -1, endY = -1;
 let ac = null;
 let sharedRef = null;
+// This view's own memory, independent of the play view: the drawing
+// state (h/v/start/end live in module scope and survive unmount), which
+// maze it came from, and the toolbar's name/direction as last left.
+// hasState is false only until the first blank or loaded maze exists.
+let hasState = false;
+let lastLoaded = '';
+let savedName = '';
+let savedDirection = 'n';
 
 function setDirty(dirty) {
   if (sharedRef) {
@@ -40,9 +48,8 @@ async function save_maze() {
   }
   await saveMazeData(new_maze,h,v,startX,startY,endX,endY,document.getElementById("directionSelect").value);
   setDirty(false);
-  if (sharedRef) {
-    sharedRef.mazeName = new_maze;
-  }
+  lastLoaded = new_maze;
+  savedName = new_maze;
   await populateMazeSelect();
   document.querySelector('#mazeSelect').value = new_maze;
 }
@@ -100,6 +107,10 @@ function render() {
 }
 
 function draw_blank_maze() {
+  hasState = true;
+  lastLoaded = '';
+  savedName = '';
+  savedDirection = 'n';
   startX = startY = endX = endY = -1;
   let maze_width = parseInt(document.getElementById('width').value) || 10;
   let maze_height = parseInt(document.getElementById('height').value) || 10;
@@ -133,6 +144,10 @@ function draw_blank_maze() {
 
 function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, direction) {
 
+  hasState = true;
+  lastLoaded = name;
+  savedName = name;
+  savedDirection = direction;
   h = new_h;
   v = new_v;
 
@@ -173,9 +188,9 @@ export async function mount(el, shared) {
   ac = new AbortController();
   const signal = ac.signal;
   sharedRef = shared;
-  h = v = null;
-  selector = "walls";
-  startX = startY = endX = endY = -1;
+  // Drawing state (h/v/start/end, lastLoaded, savedName/Direction) is
+  // deliberately NOT reset: it is this view's memory across switches.
+  selector = "walls"; // matches the freshly rendered toolbar
 
   el.className = 'view-create';
   el.innerHTML = `
@@ -246,22 +261,31 @@ export async function mount(el, shared) {
     }, { signal });
   });
 
-  // Set up the canvas and paint a blank maze immediately, so the view
-  // never sits blank while the maze list loads over the network.
+  // Set up the canvas and paint immediately — the restored drawing if
+  // this view has state, otherwise a blank maze — so the view never
+  // sits blank while the maze list loads over the network.
   wrap = document.getElementById('canvasWrap');
   canvas = document.getElementById('mazeCanvas');
   ctx = canvas.getContext('2d');
   fitCanvas();
-  draw_blank_maze();
+  if (hasState) {
+    document.getElementById('width').value = h.length;
+    document.getElementById('height').value = v.length;
+    document.getElementById('name').value = savedName;
+    document.querySelector('#directionSelect').value = savedDirection;
+    render();
+  } else {
+    draw_blank_maze();
+  }
 
   const mazeSelect = document.getElementById("mazeSelect");
   await populateMazeSelect();
+  if (hasState && lastLoaded) {
+    mazeSelect.value = lastLoaded;
+  }
 
   mazeSelect.addEventListener('change', async () => {
     if(mazeSelect.value != '') {
-      if (sharedRef) {
-        sharedRef.mazeName = mazeSelect.value;
-      }
       try {
         const data = await getMazeData(mazeSelect.value);
         draw_loaded_maze(mazeSelect.value, data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction);
@@ -348,32 +372,24 @@ export async function mount(el, shared) {
     render();
   }, { signal });
 
-  if (shared.mazeName) {
-    mazeSelect.value = shared.mazeName;
-    if (mazeSelect.value === shared.mazeName) {
-      try {
-        const data = await getMazeData(shared.mazeName);
-        draw_loaded_maze(shared.mazeName, data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction);
-      } catch (err) {
-        console.error('Failed to get maze data:', err);
-        draw_blank_maze();
-      }
-    } else {
-      draw_blank_maze();
-    }
-  } else {
-    draw_blank_maze();
-  }
-
 }
 
 export function unmount() {
+  // Remember the toolbar exactly as left (even an unsaved typed name),
+  // and keep the drawing state in module scope for the next mount.
+  const nameEl = document.getElementById('name');
+  if (nameEl) {
+    savedName = nameEl.value;
+  }
+  const dirEl = document.querySelector('#directionSelect');
+  if (dirEl) {
+    savedDirection = dirEl.value;
+  }
   if (ac) {
     ac.abort();
     ac = null;
   }
   document.body.style.cursor = 'auto';
   canvas = ctx = wrap = null;
-  h = v = null;
   sharedRef = null;
 }

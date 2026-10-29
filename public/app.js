@@ -5,15 +5,16 @@
 // uses the AbortSignal it is handed, so unmounting tears the view down
 // completely and views can be swapped freely.
 //
-// Shared state across views: the currently selected maze name (so
-// Create -> Play keeps your maze) and the editor's dirty flag (so the
-// version check never force-reloads over unsaved work).
+// The views are independent: each remembers its own loaded maze (and
+// the play view even restores your position), so loading a maze in one
+// view never changes the other. The only shell-level shared state is
+// the editor's dirty flag, so the version check never force-reloads
+// over unsaved work.
 
 import { mount as mountPlay, unmount as unmountPlay } from './views/play.js';
 import { mount as mountCreate, unmount as unmountCreate } from './views/create.js';
 
 const shared = {
-  mazeName: '',
   editorDirty: false,
 };
 

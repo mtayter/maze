@@ -21,6 +21,11 @@ let winShown = false;
 let mapPinned = false;
 let ac = null; // AbortController for this mount's listeners
 let viewEl = null;
+// This view's own memory, independent of the editor: which maze was
+// loaded here, and where the player stood in it. Module scope survives
+// unmount/remount, so switching views restores the game as left.
+let lastMaze = '';
+let restoreState = null;
 
 const wall_color = '#c0c0c0';
 const floor_color = '#909090';
@@ -315,6 +320,18 @@ async function loadMaze(mazeName) {
   hideError();
   setMapVisible(false);
   player = new Player(maze.start_x + 0.5, maze.start_y + 0.5, maze.directionRad);
+  if (restoreState && restoreState.maze === mazeName) {
+    player.x = restoreState.x;
+    player.y = restoreState.y;
+    player.z = restoreState.z;
+    player.yaw = restoreState.yaw;
+    player.pitch = restoreState.pitch;
+    winShown = restoreState.winShown;
+    if (winShown) {
+      showWin();
+    }
+    restoreState = null;
+  }
 
   panels = [];
 
@@ -473,14 +490,15 @@ export async function mount(el, shared) {
   await populateMazeSelect();
 
   const mazeSelect = document.getElementById("mazeSelect");
-  if (shared.mazeName) {
-    mazeSelect.value = shared.mazeName;
-    if (mazeSelect.value === shared.mazeName) {
-      await loadMaze(shared.mazeName);
+  if (lastMaze) {
+    mazeSelect.value = lastMaze;
+    if (mazeSelect.value === lastMaze) {
+      await loadMaze(lastMaze);
     }
   }
   mazeSelect.addEventListener('change', async () => {
-    shared.mazeName = mazeSelect.value;
+    lastMaze = mazeSelect.value;
+    restoreState = null; // a freshly picked maze starts at its start
     if(mazeSelect.value != '') {
       try {
         mazeSelect.blur();
@@ -597,6 +615,14 @@ export async function mount(el, shared) {
 }
 
 export function unmount() {
+  if (player && lastMaze) {
+    restoreState = {
+      maze: lastMaze,
+      x: player.x, y: player.y, z: player.z,
+      yaw: player.yaw, pitch: player.pitch,
+      winShown,
+    };
+  }
   if (ac) {
     ac.abort();
     ac = null;
