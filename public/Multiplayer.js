@@ -6,7 +6,7 @@
 // plus the spawn-collision solver (a pure function, kept here so it
 // can be unit-tested without a DOM).
 
-import { getUser } from './Auth.js?v=4.1.2';
+import { getUser } from './Auth.js?v=4.1.3';
 
 const API = '/app/maze';
 const HEARTBEAT_MS = 5000;

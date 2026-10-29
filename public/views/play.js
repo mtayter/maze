@@ -5,14 +5,14 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=4.1.2';
-import Maze from '../Maze.js?v=4.1.2';
-import Player from '../Player.js?v=4.1.2';
-import Map from '../Map.js?v=4.1.2';
-import { Rect3d } from "../Geometry.js?v=4.1.2";
-import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.1.2';
-import * as Multiplayer from '../Multiplayer.js?v=4.1.2';
-import { getUser } from '../Auth.js?v=4.1.2';
+import { getMazeData, listMazes } from '../MazeDB.js?v=4.1.3';
+import Maze from '../Maze.js?v=4.1.3';
+import Player from '../Player.js?v=4.1.3';
+import Map from '../Map.js?v=4.1.3';
+import { Rect3d } from "../Geometry.js?v=4.1.3";
+import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.1.3';
+import * as Multiplayer from '../Multiplayer.js?v=4.1.3';
+import { getUser } from '../Auth.js?v=4.1.3';
 
 let maze, player, map;
 let canvas, ctx;
@@ -121,18 +121,29 @@ function myPos() {
   return { x: player.x, z: player.z, yaw: player.yaw, y: player.y };
 }
 
-// The one and only player figure: legs, torso, and a lighter head,
-// in an avatar color, scaled by Grow/Shrink level (eye height
+// The one and only player figure: two legs, a torso, and a lighter
+// head, in an avatar color, scaled by Grow/Shrink level (eye height
 // relative to the standard 0.5). Other players are drawn from all
 // three parts; your own view uses the same parts (minus the head —
 // your camera sits in it), pitch-gated so the forward view stays
 // clear: legs appear once you look down a couple of steps, the
 // torso a step further. Because the figure scales with eye
 // height, those angles are the same at every size.
+//
+// Body axes: transformFor maps local +x onto the player's facing
+// direction and local +z onto their left, so x is the figure's
+// front-to-back thickness and z its left-to-right width. The wide
+// dimensions (legs stance 0.32, shoulders 0.38) run along z; the
+// thin ones (0.18 / 0.22) along x. (Before 4.1.3 these were
+// swapped, which made the figure read as rotated 90°: narrow from
+// the front, wide from the side. The legs were also a single slab.)
 function personParts(color, s) {
   return {
-    legs: Rect3d([-0.16, 0, -0.09], [0.16, 0.45 * s, 0.09], color),
-    torso: Rect3d([-0.19, 0.45 * s, -0.11], [0.19, 0.8 * s, 0.11], color),
+    legs: [
+      ...Rect3d([-0.09, 0, 0.03], [0.09, 0.45 * s, 0.16], color),
+      ...Rect3d([-0.09, 0, -0.16], [0.09, 0.45 * s, -0.03], color),
+    ],
+    torso: Rect3d([-0.11, 0.45 * s, -0.19], [0.11, 0.8 * s, 0.19], color),
     head: Rect3d([-0.11, 0.8 * s, -0.11], [0.11, 1.0 * s, 0.11], lighten(color)),
   };
 }
@@ -173,10 +184,10 @@ function draw() {
   // own scale), minus the head, pitch-gated (see personParts) — but
   // drawn shifted backward by EYE_FORWARD (scaled by Grow/Shrink,
   // like the figure itself), as if the eyes stick out from the
-  // front of the face: the face front (0.11 ahead of the figure's
-  // center) ends up just behind the camera while the leg and torso
-  // fronts (0.16 / 0.19) stay just ahead of it, so looking down
-  // shows the FRONT of the body instead of the box interiors.
+  // front of the face: the eye (0.135 ahead of the figure's center)
+  // ends up in front of every body front — head and torso at 0.11,
+  // legs at 0.09 — so looking down shows the FRONT of the body
+  // instead of the box interiors.
   // Self view only; everyone else sees the figure at its true spot.
   const me = getUser();
   const myScale = player.y / 0.5;
