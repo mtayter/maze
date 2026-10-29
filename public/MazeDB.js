@@ -20,25 +20,35 @@ export async function getMazeData(mazeName) {
   }
 }
 
+// The maze list is memoized for the session so SPA view switches can
+// restore the picker instantly; saveMazeData invalidates the cache.
+let listCache = null;
+
 export async function listMazes() {
-  try {
-    const response = await fetch('/app/maze/list', {
-      method: 'GET'
-    });
+  if (!listCache) {
+    listCache = (async () => {
+      try {
+        const response = await fetch('/app/maze/list', {
+          method: 'GET'
+        });
 
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
 
-    const data = await response.json();
-    return data;
-  } catch (err) {
-    console.error('Error sending data: ', err);
-    throw err; // propagate error to caller if needed
+        return await response.json();
+      } catch (err) {
+        listCache = null;
+        console.error('Error sending data: ', err);
+        throw err; // propagate error to caller if needed
+      }
+    })();
   }
+  return listCache;
 }
 
 export async function saveMazeData(mazeName, h, v, start_x, start_y, end_x, end_y, direction) {
+  listCache = null;
   try {
     const response = await fetch('/app/maze/save', {
       method: 'POST',

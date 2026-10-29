@@ -1,20 +1,33 @@
 # Maze
 
-A first-person 3D maze game in the browser, plus a maze editor.
+A first-person 3D maze game in the browser, plus a maze editor. The
+frontend is a single-page app: one shell (`public/index.html`) with two
+hash-routed views.
 
-- **Play:** `maze.html` — walk a maze in first-person view (canvas-rendered
+- **Play** (`#/play`) — walk a maze in first-person view (canvas-rendered
   3D), from the start marker to the end marker.
-- **Create:** `draw.html` — draw walls on a grid, set start/end and the
+- **Create** (`#/create`) — draw walls on a grid, set start/end and the
   start direction, and save the maze to the database.
 
 Mazes are stored in a database and shared: anything saved in the editor is
 immediately playable in the game.
 
+**Version stamp:** `index.html` carries a `<meta name="app-version">`
+stamp and `public/version.json` carries the same value. The shell checks
+`version.json` (no-store) on load, when the tab becomes visible, and every
+15 minutes; if the deployed version is newer than the loaded shell it
+reloads once (or shows an update banner when the editor has unsaved
+changes). **Bump both stamps together in any commit that changes files
+under `public/`.**
+
+Future plans (z-buffer renderer, Google SSO, multiplayer) are in
+[ROADMAP.md](ROADMAP.md).
+
 ## Architecture
 
 ```
 Browser (static files in public/)
-  │  GET /maze/maze.html, /maze/draw.html, *.js, *.css, *.png
+  │  GET /maze/ (index.html SPA shell), *.js, *.css, *.png, version.json
   │  fetch() calls to /app/maze/*
   ▼
 Apache (or any reverse proxy + static host)
@@ -90,8 +103,8 @@ sudo a2enconf maze
 sudo systemctl reload apache2
 ```
 
-Open `https://<your-host>/maze/maze.html` to play (`draw.html` for the
-editor). To keep the user service running after logout:
+Open `https://<your-host>/maze/` to play (the editor is the Create tab,
+or `#/create`). To keep the user service running after logout:
 
 ```sh
 loginctl enable-linger "$USER"
@@ -154,9 +167,12 @@ CREATE TABLE maze (
 ```
 install.sh                Interactive + --non-interactive installer
 server/maze.js            API server (Express + MySQL). No secrets in code.
-public/                   Static browser frontend (game + editor)
-  maze.html / maze.js     The game
-  draw.html / draw.js     The editor
+public/                   Static browser frontend (SPA: game + editor)
+  index.html              The shell (top bar, nav, update banner)
+  app.js                  Hash router + version check
+  views/play.js           The game view
+  views/create.js         The editor view
+  version.json            Deployed version stamp (keep in sync with index.html)
   Maze.js, Map.js, Geometry.js, Player.js, MazeDB.js, maze.css
   start.png, end.png     Start / end markers
 schema.sql                Creates the maze table

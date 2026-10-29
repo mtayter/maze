@@ -14,8 +14,10 @@ export default class Map {
   }
 
   resize() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    // The canvas fills its view (below the shell bar in the SPA);
+    // fall back to window size while it is display:none (client size 0).
+    this.canvas.width = this.canvas.clientWidth || window.innerWidth;
+    this.canvas.height = this.canvas.clientHeight || window.innerHeight;
   }
   draw() {
     if (!this.ctx || !this.maze) {

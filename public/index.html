@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <!-- App version stamp: must match version.json. Bump BOTH together in
+       any commit that changes files under public/ (see README). -->
+  <meta name="app-version" content="2.0.0">
+  <title>Maze 🌀</title>
+  <link rel="stylesheet" href="maze.css">
+</head>
+
+<body>
+  <noscript>Please enable JavaScript to use this app.</noscript>
+  <header id="shellbar">
+    <span class="brand">🌀 Maze</span>
+    <nav class="shell-nav" aria-label="Main">
+      <a href="#/play" id="navPlay">▶️ Play</a>
+      <a href="#/create" id="navCreate">✏️ Create</a>
+    </nav>
+    <div id="authSlot"><!-- SSO sign-in lands here in a later phase --></div>
+  </header>
+  <main id="view"></main>
+  <div id="updateBanner" role="alert">
+    <span>✨ A new version of Maze is available.</span>
+    <button class="btn btn-primary" id="updateReloadBtn" type="button">Reload now</button>
+    <button class="btn" id="updateDismissBtn" type="button">Later</button>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+
+</html>

@@ -45,12 +45,96 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
-#app {
+/* ---------- SPA shell ---------- */
+
+body {
   display: flex;
   flex-direction: column;
   height: 100dvh;
+}
+
+#shellbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(6px + var(--safe-top)) calc(10px + var(--safe-right))
+    6px calc(10px + var(--safe-left));
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--panel-border);
+  z-index: 30;
+}
+#shellbar .brand {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.shell-nav {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.shell-nav a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 15px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+}
+.shell-nav a:active { transform: scale(0.96); }
+.shell-nav a[aria-current="page"] {
+  background: var(--accent);
+  color: #052e16;
+}
+#authSlot { display: flex; align-items: center; }
+
+#view {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0;
   width: 100%;
 }
+
+/* Views fill the area below the shell bar */
+.view-play { position: absolute; inset: 0; }
+.view-create {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* Update banner (version check) */
+#updateBanner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(14px + var(--safe-bottom));
+  z-index: 60;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-solid);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 8px 8px 18px;
+  box-shadow: var(--shadow);
+  font-size: 15px;
+  max-width: calc(100vw - 24px);
+}
+#updateBanner.show { display: flex; }
+#updateBanner .btn { min-height: 40px; }
 
 /* ---------- shared controls ---------- */
 
@@ -149,9 +233,7 @@ select option {
   color: #052e16;
 }
 
-/* ---------- play page ---------- */
-
-.play-page #app { position: relative; display: block; }
+/* ---------- play view ---------- */
 
 canvas.game-canvas {
   border: none;
@@ -361,9 +443,7 @@ canvas.game-canvas {
   to { transform: scale(1); opacity: 1; }
 }
 
-/* ---------- editor page ---------- */
-
-.draw-page #app { background: #f8fafc; color: #0f172a; }
+/* ---------- create view (editor) ---------- */
 
 .editor-bar {
   background: var(--panel-solid);

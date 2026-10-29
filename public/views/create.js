@@ -1,9 +1,22 @@
-import Maze from './Maze.js';
-import { saveMazeData, listMazes, getMazeData } from './MazeDB.js';
+// Create view: maze editor.
+// mount(el, shared) renders into el; unmount() aborts every listener
+// registered during mount. Edits set shared.editorDirty so the shell's
+// version check never force-reloads over unsaved work; saving clears it.
+
+import Maze from '../Maze.js';
+import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
 let startX = -1, startY = -1, endX = -1, endY = -1;
+let ac = null;
+let sharedRef = null;
+
+function setDirty(dirty) {
+  if (sharedRef) {
+    sharedRef.editorDirty = dirty;
+  }
+}
 
 async function save_maze() {
   let new_maze = document.getElementById("name").value.trim();
@@ -26,6 +39,10 @@ async function save_maze() {
     return;
   }
   await saveMazeData(new_maze,h,v,startX,startY,endX,endY,document.getElementById("directionSelect").value);
+  setDirty(false);
+  if (sharedRef) {
+    sharedRef.mazeName = new_maze;
+  }
   await populateMazeSelect();
   document.querySelector('#mazeSelect').value = new_maze;
 }
@@ -110,6 +127,7 @@ function draw_blank_maze() {
     }
   }
 
+  setDirty(false);
   render();
 }
 
@@ -131,6 +149,7 @@ function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, di
   endX = end_x;
   endY = end_y;
 
+  setDirty(false);
   render();
 }
 
@@ -150,19 +169,21 @@ function fitCanvas() {
   canvas.height = win_height;
 }
 
-async function init() {
+export async function mount(el, shared) {
+  ac = new AbortController();
+  const signal = ac.signal;
+  sharedRef = shared;
+  h = v = null;
+  selector = "walls";
+  startX = startY = endX = endY = -1;
 
-  let app = document.getElementById('app');
-  app.innerHTML = `
+  el.className = 'view-create';
+  el.innerHTML = `
     <header class="editor-bar">
-      <div class="editor-top">
-        <span class="brand">✏️ Create Maze</span>
-        <a class="btn" href="maze.html">🌀 Play</a>
-      </div>
       <div class="editor-group">
         <span class="group-label">Size</span>
-        <label class="field">W <input type="number" id="width" min="2" max="40" inputmode="numeric" value="10"></label>
-        <label class="field">H <input type="number" id="height" min="2" max="40" inputmode="numeric" value="10"></label>
+        <label class="field">W <input type="number" id="width" min="1" max="40" inputmode="numeric" value="10"></label>
+        <label class="field">H <input type="number" id="height" min="1" max="40" inputmode="numeric" value="10"></label>
         <button class="btn" id="reloadBtn" type="button">🧹 New blank</button>
       </div>
       <div class="editor-group">
@@ -204,11 +225,11 @@ async function init() {
 
   reloadBtn.addEventListener('click', () => {
     draw_blank_maze();
-  });
+  }, { signal });
 
   saveBtn.addEventListener('click', () => {
     save_maze();
-  });
+  }, { signal });
 
   document.querySelectorAll('input[name="selectorRadio"]').forEach(radio => {
     radio.addEventListener('change', () => {
@@ -222,14 +243,25 @@ async function init() {
         document.body.style.cursor = 'auto';
         selector = "walls";
       }
-    });
+    }, { signal });
   });
+
+  // Set up the canvas and paint a blank maze immediately, so the view
+  // never sits blank while the maze list loads over the network.
+  wrap = document.getElementById('canvasWrap');
+  canvas = document.getElementById('mazeCanvas');
+  ctx = canvas.getContext('2d');
+  fitCanvas();
+  draw_blank_maze();
 
   const mazeSelect = document.getElementById("mazeSelect");
   await populateMazeSelect();
 
   mazeSelect.addEventListener('change', async () => {
     if(mazeSelect.value != '') {
+      if (sharedRef) {
+        sharedRef.mazeName = mazeSelect.value;
+      }
       try {
         const data = await getMazeData(mazeSelect.value);
         draw_loaded_maze(mazeSelect.value, data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction);
@@ -242,15 +274,7 @@ async function init() {
       document.getElementById('height').value = 10;
       draw_blank_maze();
     }
-  });
-
-  wrap = document.getElementById('canvasWrap');
-  canvas = document.getElementById('mazeCanvas');
-  ctx = canvas.getContext('2d');
-  fitCanvas();
-
-  // iOS Safari ignores user-scalable=no; block its pinch gesture event.
-  document.addEventListener('gesturestart', e => e.preventDefault());
+  }, { signal });
 
   canvas.addEventListener("pointerdown", function(event) {
     if (!event.isPrimary) return;
@@ -282,6 +306,7 @@ async function init() {
           h[wx][wy] = h[wx][wy] ? 0 : 1;
           color = h[wx][wy] ? '#000000' : '#e2e8f0';
           createline(wx, wy, wx + 1, wy, color);
+          setDirty(true);
         }
       } else {
         // Click is closer to vertical wall
@@ -291,6 +316,7 @@ async function init() {
           v[wy][wx] = v[wy][wx] ? 0 : 1;
           color = v[wy][wx] ? '#000000' : '#e2e8f0';
           createline(wx, wy, wx, wy + 1, color);
+          setDirty(true);
         }
       }
     } else {
@@ -310,19 +336,44 @@ async function init() {
           endX = wx;
           endY = wy;
         }
+        setDirty(true);
         render();
       }
     }
 
-  });
+  }, { signal });
 
   window.addEventListener('resize', () => {
     fitCanvas();
     render();
-  });
+  }, { signal });
 
-  draw_blank_maze();
+  if (shared.mazeName) {
+    mazeSelect.value = shared.mazeName;
+    if (mazeSelect.value === shared.mazeName) {
+      try {
+        const data = await getMazeData(shared.mazeName);
+        draw_loaded_maze(shared.mazeName, data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction);
+      } catch (err) {
+        console.error('Failed to get maze data:', err);
+        draw_blank_maze();
+      }
+    } else {
+      draw_blank_maze();
+    }
+  } else {
+    draw_blank_maze();
+  }
 
 }
 
-init();
+export function unmount() {
+  if (ac) {
+    ac.abort();
+    ac = null;
+  }
+  document.body.style.cursor = 'auto';
+  canvas = ctx = wrap = null;
+  h = v = null;
+  sharedRef = null;
+}

@@ -336,5 +336,5 @@ Still manual (needs sudo; varies by setup) — serve the frontend + proxy the AP
        sudo cp $APP_DIR/apache-proxy.conf.example /etc/apache2/conf-available/maze.conf
        sudo a2enconf maze
        sudo systemctl reload apache2
-  3. Open https://<your-host>/maze/maze.html to play (editor: draw.html).
+  3. Open https://<your-host>/maze/ to play (editor: the Create tab).
 EOF

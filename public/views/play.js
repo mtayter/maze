@@ -1,8 +1,16 @@
-import { getMazeData, listMazes } from './MazeDB.js';
-import Maze from './Maze.js';
-import Player from './Player.js';
-import Map from './Map.js';
-import { Rect3d, trianglize } from "./Geometry.js";
+// Play view: first-person 3D maze game.
+// mount(el, shared) renders into el; unmount() aborts every listener
+// registered during mount (all use the mount's AbortSignal).
+//
+// Rendering note: draw() uses the painter's algorithm over `panels`.
+// A future phase replaces that with a z-buffer; keep the renderer
+// self-contained in this module so that swap touches nothing else.
+
+import { getMazeData, listMazes } from '../MazeDB.js';
+import Maze from '../Maze.js';
+import Player from '../Player.js';
+import Map from '../Map.js';
+import { Rect3d, trianglize } from "../Geometry.js";
 
 let maze, player, map;
 let canvas, ctx;
@@ -11,11 +19,11 @@ let fov, fx, fy;
 let maze_triangles;
 let winShown = false;
 let mapPinned = false;
+let ac = null; // AbortController for this mount's listeners
+let viewEl = null;
 
 const wall_color = '#c0c0c0';
 const floor_color = '#909090';
-//const wall_color = 'red';
-//const floor_color = 'blue';
 const body_color = '#ffdbac';
 const start_color = '#c00000';
 const end_color = '#00c000';
@@ -89,7 +97,6 @@ function transform([x,y,z]) {
   // rotate feet and legs to match player's angle and move to player's location
   const rx = x * Math.cos(player.yaw) - z * Math.sin(player.yaw);
   const rz = x * Math.sin(player.yaw) + z * Math.cos(player.yaw);
-//  return [5.5 + rx, y, 0.5 + rz];
   return [player.x + rx, y, player.z + rz];
 }
 
@@ -269,9 +276,9 @@ function setMapVisible(visible) {
   if (!map) return;
   const btn = document.getElementById('mapBtn');
   if (visible) {
+    map.show();
     map.resize();
     map.draw();
-    map.show();
   } else {
     map.hide();
   }
@@ -376,32 +383,36 @@ async function loadMaze(mazeName) {
 }
 
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  // The view sits below the shell bar, so size to the view, not the window.
+  canvas.width = viewEl.clientWidth || window.innerWidth;
+  canvas.height = viewEl.clientHeight || window.innerHeight;
   fy = (canvas.height / 2) / Math.tan(fov / 2);
   fx = fy * (canvas.width / canvas.height);
 }
 
-async function init() {
+export async function mount(el, shared) {
+  ac = new AbortController();
+  const signal = ac.signal;
+  viewEl = el;
+  maze = player = map = panels = null;
+  winShown = false;
+  mapPinned = false;
 
-  let app = document.getElementById('app');
-  app.innerHTML = `
+  el.className = 'view-play';
+  el.innerHTML = `
     <canvas id="mazeCanvas" class="game-canvas"></canvas>
     <canvas id="mapCanvas"></canvas>
     <div id="topbar">
-      <span class="brand">🌀 Maze</span>
       <label class="field" for="mazeSelect">
         <select id="mazeSelect" aria-label="Choose a maze">
           <option value="">Pick a maze…</option>
         </select>
       </label>
-      <a class="btn" href="draw.html" title="Create your own maze">✏️ Create</a>
     </div>
     <div class="hint-pill">WASD to move &nbsp;·&nbsp; Arrows to turn &amp; look &nbsp;·&nbsp; T / G grow &amp; shrink &nbsp;·&nbsp; Hold M for map &nbsp;·&nbsp; Drag to look around</div>
     <div class="touch-controls" aria-label="Touch controls">
       <div>
         <div class="pad" role="group" aria-label="Move">
-
           <span class="spacer"></span>
           <button class="btn" type="button" data-action="forward" aria-label="Move forward">⬆️</button>
           <span class="spacer"></span>
@@ -462,7 +473,14 @@ async function init() {
   await populateMazeSelect();
 
   const mazeSelect = document.getElementById("mazeSelect");
+  if (shared.mazeName) {
+    mazeSelect.value = shared.mazeName;
+    if (mazeSelect.value === shared.mazeName) {
+      await loadMaze(shared.mazeName);
+    }
+  }
   mazeSelect.addEventListener('change', async () => {
+    shared.mazeName = mazeSelect.value;
     if(mazeSelect.value != '') {
       try {
         mazeSelect.blur();
@@ -473,16 +491,16 @@ async function init() {
     } else {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
-  });
+  }, { signal });
 
   document.getElementById('mapBtn').addEventListener('click', () => {
     if (mazeSelect.value != '') toggleMap();
-  });
-  document.getElementById('growBtn').addEventListener('click', grow);
-  document.getElementById('shrinkBtn').addEventListener('click', shrink);
-  document.getElementById('winDismissBtn').addEventListener('click', hideWin);
-  document.getElementById('errorDismissBtn').addEventListener('click', hideError);
-  document.getElementById('mapCanvas').addEventListener('click', () => setMapVisible(false));
+  }, { signal });
+  document.getElementById('growBtn').addEventListener('click', grow, { signal });
+  document.getElementById('shrinkBtn').addEventListener('click', shrink, { signal });
+  document.getElementById('winDismissBtn').addEventListener('click', hideWin, { signal });
+  document.getElementById('errorDismissBtn').addEventListener('click', hideError, { signal });
+  document.getElementById('mapCanvas').addEventListener('click', () => setMapVisible(false), { signal });
 
   const actions = {
     'forward': () => move('forward'),
@@ -495,11 +513,8 @@ async function init() {
     'look-down': () => look('down'),
   };
   document.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => actions[btn.dataset.action]());
+    btn.addEventListener('click', () => actions[btn.dataset.action](), { signal });
   });
-
-  // iOS Safari ignores user-scalable=no; block its pinch gesture event.
-  document.addEventListener('gesturestart', e => e.preventDefault());
 
   // Drag on the 3D view to turn / look — one step per ~36px of drag,
   // so a continuous swipe keeps turning. Primary pointer only, so a
@@ -508,7 +523,7 @@ async function init() {
   canvas.addEventListener('pointerdown', e => {
     if (!e.isPrimary) return;
     drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
-  });
+  }, { signal });
   canvas.addEventListener('pointermove', e => {
     if (!drag || !player || e.pointerId !== drag.id) return;
     const dx = e.clientX - drag.x;
@@ -523,11 +538,11 @@ async function init() {
       drag.x = e.clientX;
       drag.y = e.clientY;
     }
-  });
+  }, { signal });
   const endDrag = (e) => { if (!drag || e.pointerId === drag.id) drag = null; };
-  canvas.addEventListener('pointerup', endDrag);
-  canvas.addEventListener('pointercancel', endDrag);
-  canvas.addEventListener('pointerleave', endDrag);
+  canvas.addEventListener('pointerup', endDrag, { signal });
+  canvas.addEventListener('pointercancel', endDrag, { signal });
+  canvas.addEventListener('pointerleave', endDrag, { signal });
 
   window.addEventListener("keydown", e => {
     if(e.code == "ArrowUp") {
@@ -555,12 +570,12 @@ async function init() {
         return;
       }
       if(mazeSelect.value != '' && map) {
+        map.show();
         map.resize();
         map.draw();
-        map.show();
       }
     }
-  });
+  }, { signal });
 
   window.addEventListener("keyup", function(e) {
     if(e.code == "KeyM") {
@@ -568,7 +583,7 @@ async function init() {
         map.hide();
       }
     }
-  });
+  }, { signal });
 
   window.addEventListener("resize", function() {
     resize();
@@ -577,8 +592,14 @@ async function init() {
       map.resize();
       map.draw();
     }
-  });
+  }, { signal });
 
 }
 
-await init();
+export function unmount() {
+  if (ac) {
+    ac.abort();
+    ac = null;
+  }
+  maze = player = map = panels = canvas = ctx = viewEl = null;
+}
