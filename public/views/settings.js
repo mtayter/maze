@@ -2,7 +2,7 @@
 // The avatar color is saved on the user row (server: POST
 // /app/maze/settings) and will identify the player in multiplayer.
 
-import { getUser, setUser, saveSettings } from '../Auth.js?v=4.0.0';
+import { getUser, setUser, saveSettings } from '../Auth.js?v=4.0.1';
 
 const SWATCHES = [
   '#22c55e', '#ef4444', '#f59e0b', '#eab308',

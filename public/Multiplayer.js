@@ -6,12 +6,12 @@
 // plus the spawn-collision solver (a pure function, kept here so it
 // can be unit-tested without a DOM).
 
-import { getUser } from './Auth.js?v=4.0.0';
+import { getUser } from './Auth.js?v=4.0.1';
 
 const API = '/app/maze';
 const HEARTBEAT_MS = 5000;
 
-let current = null; // { maze, x, z, yaw, onRoster }
+let current = null; // { maze, x, z, yaw, y, onRoster }
 let eventSource = null;
 let heartbeatTimer = null;
 let others = [];
@@ -38,7 +38,7 @@ async function sendPresence() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        maze: current.maze, x: current.x, z: current.z, yaw: current.yaw,
+        maze: current.maze, x: current.x, z: current.z, yaw: current.yaw, y: current.y,
       }),
     });
     if (response.status === 401) {
@@ -61,13 +61,14 @@ function onVisibility() {
   }
 }
 
-// Join a maze's room at the given position. Resolves with the full
-// roster (including self) as the server sees it right after our
-// first presence POST — the play view uses it to resolve spawn
-// collisions. onRoster(others) fires on every later roster change.
-export async function join(maze, x, z, yaw, onRoster) {
+// Join a maze's room at the given position ({x, z, yaw, y}).
+// Resolves with the full roster (including self) as the server sees
+// it right after our first presence POST — the play view uses it to
+// resolve spawn collisions. onRoster(others) fires on every later
+// roster change.
+export async function join(maze, pos, onRoster) {
   leave();
-  current = { maze, x, z, yaw, onRoster };
+  current = { maze, x: pos.x, z: pos.z, yaw: pos.yaw, y: pos.y, onRoster };
   others = [];
 
   eventSource = new EventSource(`${API}/events?maze=${encodeURIComponent(maze)}`);
@@ -84,15 +85,17 @@ export async function join(maze, x, z, yaw, onRoster) {
   return sendPresence();
 }
 
-// Report a new position/facing. Fire-and-forget: the roster flows
-// back over SSE and in the POST response.
-export function update(x, z, yaw) {
+// Report a new position/facing/height ({x, z, yaw, y}).
+// Fire-and-forget: the roster flows back over SSE and in the POST
+// response.
+export function update(pos) {
   if (!current) {
     return;
   }
-  current.x = x;
-  current.z = z;
-  current.yaw = yaw;
+  current.x = pos.x;
+  current.z = pos.z;
+  current.yaw = pos.yaw;
+  current.y = pos.y;
   sendPresence();
 }
 

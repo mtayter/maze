@@ -5,14 +5,14 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=4.0.0';
-import Maze from '../Maze.js?v=4.0.0';
-import Player from '../Player.js?v=4.0.0';
-import Map from '../Map.js?v=4.0.0';
-import { Rect3d } from "../Geometry.js?v=4.0.0";
-import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.0.0';
-import * as Multiplayer from '../Multiplayer.js?v=4.0.0';
-import { getUser } from '../Auth.js?v=4.0.0';
+import { getMazeData, listMazes } from '../MazeDB.js?v=4.0.1';
+import Maze from '../Maze.js?v=4.0.1';
+import Player from '../Player.js?v=4.0.1';
+import Map from '../Map.js?v=4.0.1';
+import { Rect3d } from "../Geometry.js?v=4.0.1";
+import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.0.1';
+import * as Multiplayer from '../Multiplayer.js?v=4.0.1';
+import { getUser } from '../Auth.js?v=4.0.1';
 
 let maze, player, map;
 let canvas, ctx;
@@ -113,14 +113,21 @@ function lighten(hex) {
   return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
 }
 
+function myPos() {
+  return { x: player.x, z: player.z, yaw: player.yaw, y: player.y };
+}
+
 // Another player, drawn as a little standing figure in their avatar
-// color (legs, torso, lighter head), rotated to their facing.
+// color (legs, torso, lighter head), rotated to their facing. The
+// figure's height scales with their Grow/Shrink level (their eye
+// height relative to the standard 0.5), like the player's own body.
 function personPanels(p) {
   const color = p.avatar_color || '#888888';
+  const s = (typeof p.y === 'number' ? p.y : 0.5) / 0.5;
   const boxes = [
-    Rect3d([-0.16, 0, -0.09], [0.16, 0.45, 0.09], color),
-    Rect3d([-0.19, 0.45, -0.11], [0.19, 0.8, 0.11], color),
-    Rect3d([-0.11, 0.8, -0.11], [0.11, 1.0, 0.11], lighten(color)),
+    Rect3d([-0.16, 0, -0.09], [0.16, 0.45 * s, 0.09], color),
+    Rect3d([-0.19, 0.45 * s, -0.11], [0.19, 0.8 * s, 0.11], color),
+    Rect3d([-0.11, 0.8 * s, -0.11], [0.11, 1.0 * s, 0.11], lighten(color)),
   ];
   return boxes.flat(1).map(shape => ({
     verts: shape.verts.map(v => transformFor(v, p.x, p.z, p.yaw)),
@@ -284,7 +291,7 @@ function move(d) {
     return;
   }
   player.move(d);
-  Multiplayer.update(player.x, player.z, player.yaw);
+  Multiplayer.update(myPos());
   if(Math.floor(player.x) == maze.end_x && Math.floor(player.z) == maze.end_y) {
     if (!winShown) {
       winShown = true;
@@ -299,7 +306,7 @@ function move(d) {
 function turn(d) {
   if (!player) return;
   player.turn(d);
-  Multiplayer.update(player.x, player.z, player.yaw);
+  Multiplayer.update(myPos());
   draw();
 }
 
@@ -312,11 +319,13 @@ function look(d) {
 function grow() {
   if (!player) return;
   player.grow();
+  Multiplayer.update(myPos());
   draw();
 }
 function shrink() {
   if (!player) return;
   player.shrink();
+  Multiplayer.update(myPos());
   draw();
 }
 
@@ -451,7 +460,7 @@ async function joinMultiplayer(mazeName) {
   const seq = ++joinSeq;
   let players;
   try {
-    players = await Multiplayer.join(mazeName, player.x, player.z, player.yaw, () => draw());
+    players = await Multiplayer.join(mazeName, myPos(), () => draw());
   } catch (err) {
     console.error('Multiplayer join failed:', err);
     return;
@@ -471,7 +480,7 @@ async function joinMultiplayer(mazeName) {
     player.z = spot.z + 0.5;
     draw();
   }
-  Multiplayer.update(player.x, player.z, player.yaw);
+  Multiplayer.update(myPos());
 }
 
 function resize() {

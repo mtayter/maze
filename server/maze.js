@@ -358,6 +358,7 @@ function rosterOf(room) {
     x: p.x,
     z: p.z,
     yaw: p.yaw,
+    y: p.y,
   }));
 }
 
@@ -412,15 +413,18 @@ app.post('/app/maze/presence', requireAuth, (req, res) => {
     res.status(400).json({ ok: false, error: 'x, z, yaw must be numbers' });
     return;
   }
+  // Height (the Grow/Shrink eye level) is optional so older clients
+  // still work; it defaults to the standard 0.5.
+  const y = typeof body.y === 'number' && Number.isFinite(body.y) ? body.y : 0.5;
   const prev = room.players.get(req.user.user_id);
   room.players.set(req.user.user_id, {
     user_id: req.user.user_id,
     name: req.user.name,
     avatar_color: req.user.avatar_color,
-    x, z, yaw,
+    x, z, yaw, y,
     updatedAt: Date.now(),
   });
-  if (!prev || prev.x !== x || prev.z !== z || prev.yaw !== yaw) {
+  if (!prev || prev.x !== x || prev.z !== z || prev.yaw !== yaw || prev.y !== y) {
     broadcastPresence(body.maze);
   }
   res.json({ ok: true, players: rosterOf(room) });

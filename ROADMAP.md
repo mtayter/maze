@@ -86,7 +86,9 @@ sends an explicit goodbye so cells free up immediately.
 - Players in the same maze see each other as little standing
   figures (legs, torso, lighter head) in their avatar colors,
   rotated to their facing and depth-tested by the same z-buffer
-  renderer as the walls.
+  renderer as the walls. The figure's height follows the player's
+  Grow/Shrink level — presence carries the eye height and the
+  figure scales proportionally (4.0.1).
 - Other players are part of collision: a move whose target cell is
   occupied is blocked, exactly like a wall bump.
 - Spawn collision: joining reports your spawn position and reads
