@@ -479,6 +479,26 @@ canvas.game-canvas {
 }
 .editor-group-nowrap { flex-wrap: nowrap; }
 .editor-group-nowrap .field { white-space: nowrap; }
+/* Label stacked above its control (Start facing / Load) */
+.stack-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.stack-field .group-label { width: auto; }
+.stack-field select {
+  font: inherit;
+  font-size: 16px; /* >=16px stops iOS focus zoom */
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  min-height: var(--tap);
+  padding: 8px 12px;
+  max-width: 100%;
+  cursor: pointer;
+}
 .editor-bar .field { color: var(--text-dim); }
 
 .canvas-wrap {

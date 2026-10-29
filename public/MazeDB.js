@@ -1,4 +1,4 @@
-import Maze from './Maze.js';
+import Maze from './Maze.js?v=2.0.2';
 
 export async function getMazeData(mazeName) {
   try {

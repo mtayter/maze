@@ -3,8 +3,8 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js';
-import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js';
+import Maze from '../Maze.js?v=2.0.2';
+import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js?v=2.0.2';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -210,19 +210,21 @@ export async function mount(el, shared) {
         </div>
       </div>
       <div class="editor-group editor-group-nowrap">
-        <label class="field">Start facing
+        <div class="stack-field">
+          <span class="group-label">Start facing</span>
           <select id="directionSelect" aria-label="Start direction">
             <option value="n" selected>⬆️ North</option>
             <option value="e">➡️ East</option>
             <option value="s">⬇️ South</option>
             <option value="w">⬅️ West</option>
           </select>
-        </label>
-        <label class="field">Load
+        </div>
+        <div class="stack-field">
+          <span class="group-label">Load</span>
           <select id="mazeSelect" aria-label="Load a maze">
             <option value="">Load…</option>
           </select>
-        </label>
+        </div>
       </div>
       <div class="editor-group">
         <span class="group-label">Name</span>

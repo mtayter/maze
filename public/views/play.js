@@ -6,11 +6,11 @@
 // A future phase replaces that with a z-buffer; keep the renderer
 // self-contained in this module so that swap touches nothing else.
 
-import { getMazeData, listMazes } from '../MazeDB.js';
-import Maze from '../Maze.js';
-import Player from '../Player.js';
-import Map from '../Map.js';
-import { Rect3d, trianglize } from "../Geometry.js";
+import { getMazeData, listMazes } from '../MazeDB.js?v=2.0.2';
+import Maze from '../Maze.js?v=2.0.2';
+import Player from '../Player.js?v=2.0.2';
+import Map from '../Map.js?v=2.0.2';
+import { Rect3d, trianglize } from "../Geometry.js?v=2.0.2";
 
 let maze, player, map;
 let canvas, ctx;

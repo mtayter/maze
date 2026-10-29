@@ -11,8 +11,8 @@
 // the editor's dirty flag, so the version check never force-reloads
 // over unsaved work.
 
-import { mount as mountPlay, unmount as unmountPlay } from './views/play.js';
-import { mount as mountCreate, unmount as unmountCreate } from './views/create.js';
+import { mount as mountPlay, unmount as unmountPlay } from './views/play.js?v=2.0.2';
+import { mount as mountCreate, unmount as unmountCreate } from './views/create.js?v=2.0.2';
 
 const shared = {
   editorDirty: false,

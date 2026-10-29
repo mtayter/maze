@@ -16,8 +16,11 @@ and `version.json` carries the same value. The shell fetches
 `version.json` (no-store) on load, on tab-visible, and every 15
 minutes; if the deployed version is newer than the loaded one it
 reloads once — unless the editor has unsaved changes, in which case it
-shows a "new version available" banner instead. Bump both stamps
-together in any commit that changes files under `public/`.
+shows a "new version available" banner instead. The stylesheet,
+`app.js`, and every ES-module import carry a matching `?v=` query so
+a stamp bump also busts stale cached subresources. Bump the meta
+stamp, `version.json`, and every `?v=` query together in any commit
+that changes files under `public/`.
 
 ## 2. Z-buffer renderer
 

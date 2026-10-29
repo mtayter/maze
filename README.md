@@ -17,8 +17,12 @@ stamp and `public/version.json` carries the same value. The shell checks
 `version.json` (no-store) on load, when the tab becomes visible, and every
 15 minutes; if the deployed version is newer than the loaded shell it
 reloads once (or shows an update banner when the editor has unsaved
-changes). **Bump both stamps together in any commit that changes files
-under `public/`.**
+changes). The stylesheet, `app.js`, and every ES-module import also carry
+a matching `?v=<version>` query, so a stamp bump busts stale cached
+subresources too (a reload alone revalidates the document but browsers
+may still serve heuristically-cached CSS/JS). **In any commit that
+changes files under `public/`, bump all of them together: the meta
+stamp, `version.json`, and every `?v=` query.**
 
 Future plans (z-buffer renderer, Google SSO, multiplayer) are in
 [ROADMAP.md](ROADMAP.md).
