@@ -43,12 +43,12 @@ Node.js API (server/maze.js, Express)
         │  GET  /app/maze/list                  → [{ name }, ...]
         │  POST /app/maze/save   { maze, h, v, start_x, start_y, end_x, end_y, direction }
         ▼
-MySQL / MariaDB — one table, `maze` (see schema.sql)
+MySQL / MariaDB — tables `maze`, `user`, `session` (see schema.sql)
 ```
 
 The API binds `127.0.0.1` by default and is meant to sit behind a reverse
-proxy — it has no auth of its own. Anyone who can reach the API can list,
-read, and save mazes.
+proxy. All maze endpoints require a Google sign-in session (see
+"Authentication" below) — an unauthenticated request gets a 401.
 
 ## Requirements
 
@@ -137,6 +137,8 @@ take precedence over the file.
 | `MAZE_HOST` | API listen host | `127.0.0.1` |
 | `MAZE_PORT` | API listen port | `3000` |
 | `MAZE_CONFIG_FILE` | Config file path | `~/.config/maze/config.env` |
+| `MAZE_GOOGLE_CLIENT_ID` | Google OAuth client ID for sign-in | *(SSO off if unset)* |
+| `MAZE_OWNER_EMAIL` | Owner who claims pre-SSO mazes on first sign-in | *(none)* |
 
 Config file format is `KEY="value"` per line; see `config.env.example`
 for a template with placeholder values. **Never commit the real config
@@ -145,9 +147,25 @@ The DB password is a runtime credential the app must present to the
 database, so it is stored as-is (not hashed); the protection is the
 gitignored 0600 file, never the repo.
 
+## Authentication
+
+Sign-in uses Google Identity Services, mirroring the mathsaic project:
+the browser POSTs the Google ID token to `/app/maze/auth`; the server
+verifies it against Google's tokeninfo endpoint (audience + expiry),
+upserts the user by Google `sub`, and sets its own session cookie
+(random token, SHA-256 hash stored in `session`, 30-day expiry,
+HttpOnly). Every maze endpoint requires that session. Each maze has
+an owner (`maze.user_id`); you can load anyone's maze but only save
+over your own — saving someone else's maze under a new name makes it
+your copy. Mazes created before SSO have `user_id = NULL` and are
+claimed by `MAZE_OWNER_EMAIL` on that user's first sign-in. Players
+pick an avatar color on the settings page (`user.avatar_color`).
+
 ## Database schema
 
-One table (`schema.sql`):
+Three tables (`schema.sql`), all singular. `user.user_id` is the
+primary key, and the same column name is the foreign key in `session`
+and `maze`:
 
 ```sql
 CREATE TABLE maze (
@@ -159,12 +177,15 @@ CREATE TABLE maze (
   end_x     INT          NOT NULL,
   end_y     INT          NOT NULL,
   direction CHAR(1)      NOT NULL,
+  user_id   INT          NULL,
   PRIMARY KEY (name)
 );
 ```
 
 `h` / `v` are JSON-encoded wall arrays (horizontal / vertical segments);
 `direction` is the player's start direction, one of `e`, `n`, `w`, `s`.
+Existing deployments get `user`, `session`, and `maze.user_id` from
+the server startup migration instead of running schema.sql.
 
 ## Project layout
 
@@ -190,8 +211,10 @@ package.json              API dependencies (express, mysql2)
 - The DB credentials used to be hardcoded in the server source. They are
   now entirely in the gitignored 0600 config file / environment; the code
   contains no credential values.
-- The API has no authentication: keep it on `127.0.0.1` behind a reverse
-  proxy, and do not expose its port directly.
+- API access requires a Google sign-in session (the maze endpoints
+  answer 401 without one), but defense in depth still applies: keep the
+  API on `127.0.0.1` behind a reverse proxy, and do not expose its port
+  directly.
 
 ## License
 

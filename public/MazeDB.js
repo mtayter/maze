@@ -1,4 +1,18 @@
-import Maze from './Maze.js?v=2.1.0';
+import Maze from './Maze.js?v=3.0.0';
+
+// The API gates everything behind the session cookie. A 401 means the
+// session is gone: tell the shell (Auth listens for this) and fail the
+// call with err.status set, so callers can distinguish error kinds.
+function checkResponse(response) {
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent('maze-unauthorized'));
+  }
+  if (!response.ok) {
+    const err = new Error(`Request failed with status ${response.status}`);
+    err.status = response.status;
+    throw err;
+  }
+}
 
 export async function getMazeData(mazeName) {
   try {
@@ -8,12 +22,13 @@ export async function getMazeData(mazeName) {
       body: JSON.stringify({ maze: mazeName })
     });
 
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
+    checkResponse(response);
 
     const data = await response.json();
-    return new Maze(data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction);
+    const maze = new Maze(data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction);
+    maze.owner_name = data.owner_name;
+    maze.mine = data.mine;
+    return maze;
   } catch (err) {
     console.error('Error sending data: ', err);
     throw err; // propagate error to caller if needed
@@ -32,9 +47,7 @@ export async function listMazes() {
           method: 'GET'
         });
 
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
-        }
+        checkResponse(response);
 
         return await response.json();
       } catch (err) {
@@ -63,9 +76,7 @@ export async function saveMazeData(mazeName, h, v, start_x, start_y, end_x, end_
                              direction: direction })
     });
 
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
+    checkResponse(response);
 
     const data = await response.json();
     return data;

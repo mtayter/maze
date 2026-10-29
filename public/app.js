@@ -1,18 +1,19 @@
-// Maze SPA shell: hash router + version check.
+// Maze SPA shell: hash router + version check + SSO gate.
 //
-// Routes: #/play (the game) and #/create (the editor). Views are modules
-// with mount(el, shared) / unmount(); every listener a view registers
-// uses the AbortSignal it is handed, so unmounting tears the view down
-// completely and views can be swapped freely.
+// Routes: #/play (the game), #/create (the editor), #/settings
+// (profile + avatar color). Views are modules with mount(el, shared) /
+// unmount(); every listener a view registers uses the AbortSignal it
+// is handed, so unmounting tears the view down completely.
 //
-// The views are independent: each remembers its own loaded maze (and
-// the play view even restores your position), so loading a maze in one
-// view never changes the other. The only shell-level shared state is
-// the editor's dirty flag, so the version check never force-reloads
-// over unsaved work.
+// SSO gates everything: until Auth reports a signed-in user, the only
+// screen is the sign-in screen. The one piece of shell-level shared
+// state is the editor's dirty flag, so the version check never
+// force-reloads over unsaved work.
 
-import { mount as mountPlay, unmount as unmountPlay } from './views/play.js?v=2.1.0';
-import { mount as mountCreate, unmount as unmountCreate } from './views/create.js?v=2.1.0';
+import { mount as mountPlay, unmount as unmountPlay } from './views/play.js?v=3.0.0';
+import { mount as mountCreate, unmount as unmountCreate } from './views/create.js?v=3.0.0';
+import { mount as mountSettings, unmount as unmountSettings } from './views/settings.js?v=3.0.0';
+import { initAuth, getUser, renderSignIn, signOut } from './Auth.js?v=3.0.0';
 
 const shared = {
   editorDirty: false,
@@ -21,6 +22,7 @@ const shared = {
 const VIEWS = {
   play: { mount: mountPlay, unmount: unmountPlay, title: 'Do Maze 🌀', nav: 'navPlay' },
   create: { mount: mountCreate, unmount: unmountCreate, title: 'Create Maze ✏️', nav: 'navCreate' },
+  settings: { mount: mountSettings, unmount: unmountSettings, title: 'Settings ⚙️', nav: 'navSettings' },
 };
 
 let currentRoute = null;
@@ -31,6 +33,10 @@ function routeFromHash() {
 }
 
 async function render() {
+  if (!getUser()) {
+    showSignIn();
+    return;
+  }
   const route = routeFromHash();
   if (route === currentRoute) {
     return;
@@ -49,6 +55,46 @@ async function render() {
   document.getElementById(VIEWS[route].nav).setAttribute('aria-current', 'page');
 
   await VIEWS[route].mount(view, shared);
+}
+
+function showSignIn() {
+  if (currentRoute) {
+    VIEWS[currentRoute].unmount();
+    currentRoute = null;
+  }
+  document.title = 'Maze 🌀 — Sign in';
+  renderSignIn(document.getElementById('view'));
+}
+
+function updateChrome() {
+  const user = getUser();
+  document.body.classList.toggle('signed-out', !user);
+  const slot = document.getElementById('authSlot');
+  if (!user) {
+    slot.innerHTML = '';
+    return;
+  }
+  const firstName = (user.name || '').split(' ')[0] || 'Player';
+  slot.innerHTML = `
+    <span class="user-chip">
+      ${user.picture ? `<img class="user-pic" src="${user.picture}" alt="" referrerpolicy="no-referrer">` : ''}
+      <span class="user-dot" style="background:${user.avatar_color || '#22c55e'}" title="Your avatar color"></span>
+      <span class="user-name" id="userName"></span>
+      <button class="btn signout-btn" id="signOutBtn" type="button">Sign out</button>
+    </span>`;
+  document.getElementById('userName').textContent = firstName;
+  document.getElementById('signOutBtn').addEventListener('click', () => {
+    signOut();
+  });
+}
+
+function onAuthChange() {
+  updateChrome();
+  if (getUser()) {
+    render();
+  } else {
+    showSignIn();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -124,5 +170,11 @@ window.addEventListener('hashchange', render);
 if (!window.location.hash) {
   window.history.replaceState(null, '', '#/play');
 }
-await render();
+await initAuth(onAuthChange);
+updateChrome();
+if (getUser()) {
+  await render();
+} else {
+  showSignIn();
+}
 initVersionCheck();

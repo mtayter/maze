@@ -32,17 +32,38 @@ painted in the rasterizer along true polygon edges only — the fan's
 internal diagonals are masked — so the old white-seam look is kept
 without draw-order artifacts.
 
-## 3. Google SSO (gates everything)
+## 3. Google SSO (gates everything) ✅ (2026-10-29)
 
-Reuse the mathsaic project's SSO setup (same Google client / flow).
-Sign-in gates the whole app — no anonymous use.
+Reuses the mathsaic project's SSO setup — same Google OAuth client
+(same origin, so no new Cloud Console setup) and the same flow: the
+client signs in with Google Identity Services and POSTs the ID token
+to `POST /app/maze/auth`; the server verifies it against Google's
+tokeninfo endpoint (audience + expiry), upserts the user by Google
+`sub`, and issues its own session — a random token whose SHA-256 hash
+is stored, 30-day expiry, in an HttpOnly `maze_session` cookie.
+`GET /app/maze/config` exposes the client ID; `GET /app/maze/me`
+restores the session; `POST /app/maze/logout` ends it;
+`POST /app/maze/settings` saves the avatar color.
 
-- Every maze has an owner. All mazes that exist when SSO lands default
-  to Mike.
-- You can only edit (and save over) your own mazes. You can load
-  anyone's maze, rename it, edit it, and save it as your own copy.
-- Settings page: each player picks an avatar color, saved in the DB
-  (used by multiplayer, phase 4).
+Tables are singular: `user` (primary key `user_id`), `session`
+(foreign key `user_id`), and `maze` gained a nullable `user_id`
+owner column — the same column name everywhere. The migration runs
+at server startup. Sign-in gates the whole app: the maze endpoints
+answer 401 without a session, and the SPA shows only a sign-in
+screen until signed in.
+
+- Every maze has an owner. Mazes created before SSO have
+  `user_id = NULL`; when the designated owner
+  (`MAZE_OWNER_EMAIL`) signs in, all unowned mazes are claimed as
+  theirs.
+- You can only save over your own mazes (the server answers 403
+  otherwise). You can load anyone's maze, rename it, edit it, and
+  save it as your own copy — the editor shows who owns the loaded
+  maze and guides the rename.
+- Settings page (`#/settings`): each player picks an avatar color,
+  saved on their `user` row (used by multiplayer, phase 4). The
+  shell shows your photo, first name, and avatar-color dot, with
+  sign-out.
 
 ## 4. Multiplayer
 

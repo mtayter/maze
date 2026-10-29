@@ -3,8 +3,8 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=2.1.0';
-import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js?v=2.1.0';
+import Maze from '../Maze.js?v=3.0.0';
+import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js?v=3.0.0';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -19,6 +19,22 @@ let hasState = false;
 let lastLoaded = '';
 let savedName = '';
 let savedDirection = 'n';
+// Ownership of the loaded maze (SSO): you may edit anything, but only
+// save over your own mazes; others' mazes save as copies (new name).
+let loadedMine = true;
+let loadedOwnerName = '';
+
+function updateOwnerNote() {
+  const note = document.getElementById('ownerNote');
+  if (!note) return;
+  if (!lastLoaded) {
+    note.textContent = '';
+  } else if (loadedMine) {
+    note.textContent = '👤 Your maze';
+  } else {
+    note.textContent = `👤 By ${loadedOwnerName || 'another player'} — saving needs a new name (saves as your copy)`;
+  }
+}
 
 function setDirty(dirty) {
   if (sharedRef) {
@@ -42,16 +58,31 @@ async function save_maze() {
       taken = true;
     }
   });
-  if (taken) {
-    alert('That name is already taken.');
+  // Saving over the maze you loaded is fine when it's yours.
+  if (taken && !(new_maze === lastLoaded && loadedMine)) {
+    alert(loadedMine || new_maze !== lastLoaded
+      ? 'That name is already taken.'
+      : `“${new_maze}” belongs to ${loadedOwnerName || 'another player'} — pick a new name to save your copy.`);
     return;
   }
-  await saveMazeData(new_maze,h,v,startX,startY,endX,endY,document.getElementById("directionSelect").value);
+  try {
+    await saveMazeData(new_maze,h,v,startX,startY,endX,endY,document.getElementById("directionSelect").value);
+  } catch (err) {
+    if (err && err.status === 403) {
+      alert(`“${new_maze}” belongs to someone else — pick a new name to save your copy.`);
+    } else if (!err || err.status !== 401) {
+      alert('Saving failed — the maze server hiccuped. Try again in a moment.');
+    }
+    return;
+  }
   setDirty(false);
   lastLoaded = new_maze;
   savedName = new_maze;
+  loadedMine = true;
+  loadedOwnerName = '';
   await populateMazeSelect();
   document.querySelector('#mazeSelect').value = new_maze;
+  updateOwnerNote();
 }
 
 function x(x) {
@@ -111,6 +142,8 @@ function draw_blank_maze() {
   lastLoaded = '';
   savedName = '';
   savedDirection = 'n';
+  loadedMine = true;
+  loadedOwnerName = '';
   startX = startY = endX = endY = -1;
   let maze_width = parseInt(document.getElementById('width').value) || 10;
   let maze_height = parseInt(document.getElementById('height').value) || 10;
@@ -140,14 +173,17 @@ function draw_blank_maze() {
 
   setDirty(false);
   render();
+  updateOwnerNote();
 }
 
-function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, direction) {
+function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, direction, ownerName, mine) {
 
   hasState = true;
   lastLoaded = name;
   savedName = name;
   savedDirection = direction;
+  loadedMine = mine !== false;
+  loadedOwnerName = ownerName || '';
   h = new_h;
   v = new_v;
 
@@ -166,6 +202,7 @@ function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, di
 
   setDirty(false);
   render();
+  updateOwnerNote();
 }
 
 async function populateMazeSelect() {
@@ -224,6 +261,7 @@ export async function mount(el, shared) {
           <select id="mazeSelect" aria-label="Load a maze">
             <option value="">Load…</option>
           </select>
+          <span class="owner-note" id="ownerNote"></span>
         </div>
       </div>
       <div class="editor-group">
@@ -285,12 +323,13 @@ export async function mount(el, shared) {
   if (hasState && lastLoaded) {
     mazeSelect.value = lastLoaded;
   }
+  updateOwnerNote();
 
   mazeSelect.addEventListener('change', async () => {
     if(mazeSelect.value != '') {
       try {
         const data = await getMazeData(mazeSelect.value);
-        draw_loaded_maze(mazeSelect.value, data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction);
+        draw_loaded_maze(mazeSelect.value, data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction, data.owner_name, data.mine);
       } catch (err) {
         console.error('Failed to get maze data:', err);
         alert(`Couldn't load “${mazeSelect.value}”. The maze server hiccuped — try again in a moment.`);
