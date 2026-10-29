@@ -22,11 +22,15 @@ a stamp bump also busts stale cached subresources. Bump the meta
 stamp, `version.json`, and every `?v=` query together in any commit
 that changes files under `public/`.
 
-## 2. Z-buffer renderer
+## 2. Z-buffer renderer ✅ (2026-10-29)
 
-Replace the painter's-algorithm sort in `public/views/play.js` with
-per-pixel depth (z-buffer) rendering. The renderer is self-contained
-in the play view, so this swap touches nothing else.
+Replaced the painter's-algorithm sort in `public/views/play.js` with
+per-pixel depth rendering: `public/Raster.js` is a small software
+rasterizer (inverse-z, perspective-correct for depth) that the play
+view feeds with near-clipped, fan-triangulated panels. Outlines are
+painted in the rasterizer along true polygon edges only — the fan's
+internal diagonals are masked — so the old white-seam look is kept
+without draw-order artifacts.
 
 ## 3. Google SSO (gates everything)
 

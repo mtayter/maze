@@ -2,22 +2,34 @@
 // mount(el, shared) renders into el; unmount() aborts every listener
 // registered during mount (all use the mount's AbortSignal).
 //
-// Rendering note: draw() uses the painter's algorithm over `panels`.
-// A future phase replaces that with a z-buffer; keep the renderer
-// self-contained in this module so that swap touches nothing else.
+// Rendering: draw() rasterizes every panel with the software z-buffer
+// in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=2.0.2';
-import Maze from '../Maze.js?v=2.0.2';
-import Player from '../Player.js?v=2.0.2';
-import Map from '../Map.js?v=2.0.2';
-import { Rect3d, trianglize } from "../Geometry.js?v=2.0.2";
+import { getMazeData, listMazes } from '../MazeDB.js?v=2.1.0';
+import Maze from '../Maze.js?v=2.1.0';
+import Player from '../Player.js?v=2.1.0';
+import Map from '../Map.js?v=2.1.0';
+import { Rect3d } from "../Geometry.js?v=2.1.0";
+import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=2.1.0';
 
 let maze, player, map;
 let canvas, ctx;
 let panels;
 let fov, fx, fy;
-let maze_triangles;
 let winShown = false;
+// Z-buffer render targets, (re)allocated when the canvas size changes.
+let offCanvas = null, offCtx = null, imgData = null, pix32 = null, zbuf = null;
+// NOTE: a plain object, not a Map — the imported Maze Map class
+// shadows the global Map constructor throughout this module.
+const colorCache = Object.create(null);
+function packed(hex) {
+  let c = colorCache[hex];
+  if (c === undefined) {
+    c = packColor(hex);
+    colorCache[hex] = c;
+  }
+  return c;
+}
 let mapPinned = false;
 let ac = null; // AbortController for this mount's listeners
 let viewEl = null;
@@ -32,19 +44,6 @@ const floor_color = '#909090';
 const body_color = '#ffdbac';
 const start_color = '#c00000';
 const end_color = '#00c000';
-
-function panelDist(quad, player, useMin = true) {
-  // painter's algorithm using min or max of euclidean distance squared
-  let dist = useMin ? Infinity : -Infinity;
-
-  for (const v of quad) {
-    const [x, y, z] = toCameraSpace(v, player);
-    const d = x*x + y*y + z*z;
-    dist = useMin ? Math.min(dist, d) : Math.max(dist, d);
-  }
-
-  return dist;
-}
 
 function toCameraSpace([x,y,z], p) {
   // distance from camera
@@ -92,12 +91,6 @@ function clipAgainstNearPlane(verts, near=0.1) {
   return clipped;
 }
 
-function project([xc,yc,zc]) {
-  const xp = fx * (xc / zc);
-  const yp = fy * (yc / zc);
-  return [Math.round(canvas.width/2 + xp), Math.round(canvas.height/2 - yp)];
-}
-
 function transform([x,y,z]) {
   // rotate feet and legs to match player's angle and move to player's location
   const rx = x * Math.cos(player.yaw) - z * Math.sin(player.yaw);
@@ -105,13 +98,27 @@ function transform([x,y,z]) {
   return [player.x + rx, y, player.z + rz];
 }
 
+function ensureBuffers() {
+  if (!offCanvas || offCanvas.width !== canvas.width || offCanvas.height !== canvas.height) {
+    offCanvas = document.createElement('canvas');
+    offCanvas.width = canvas.width;
+    offCanvas.height = canvas.height;
+    offCtx = offCanvas.getContext('2d');
+    imgData = offCtx.createImageData(canvas.width, canvas.height);
+    pix32 = new Uint32Array(imgData.data.buffer);
+    zbuf = new Float32Array(canvas.width * canvas.height);
+  }
+}
+
 function draw() {
   if (!ctx || !player || !panels) {
     return;
   }
 
-  ctx.fillStyle = "black";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ensureBuffers();
+  const W = canvas.width;
+  const H = canvas.height;
+  clearFrame(pix32, zbuf);
 
   const sprite = [
     Rect3d([-0.20,0,0.05],[0.20,0.2,0.15],body_color),
@@ -128,42 +135,37 @@ function draw() {
     }))
   ];
 
-  const EPS = 1e-6;
-  everything.sort((a, b) => {
-    // painter's algorithm, sort by farthest first
-    let wda = panelDist(a.verts, player, true);
-    let wdb = panelDist(b.verts, player, true);
-    if(Math.abs(wdb - wda) > EPS) {
-      // based on nearest corner
-      return wdb - wda;
-    } else {
-      // tie breaker: based on furthest corner
-      wda = panelDist(a.verts, player, false);
-      wdb = panelDist(b.verts, player, false);
-      return wdb - wda;
-    }
-  });
-
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "white";
-  for(let panel of everything) {
+  // Z-buffer: draw order no longer matters; each panel is clipped to
+  // the near plane, projected with inverse-z, and fan-triangulated
+  // into the rasterizer. The fan's internal diagonals are masked out
+  // of edge painting so quads don't grow fake seams.
+  for (const panel of everything) {
     const camVerts = panel.verts.map(v => toCameraSpace(v, player));
     const clipped = clipAgainstNearPlane(camVerts);
     if (clipped.length < 3) {
-      continue; // too small to draw
+      continue; // behind the camera / too small to draw
     }
-    const pts = clipped.map(v => project(v));
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for(let i=1; i<pts.length; i++) {
-      ctx.lineTo(pts[i][0], pts[i][1]);
+    const pts = clipped.map(([xc, yc, zc]) => [
+      W / 2 + fx * (xc / zc),
+      H / 2 - fy * (yc / zc),
+      1 / zc,
+    ]);
+    const fill32 = packed(panel.color);
+    const n = pts.length;
+    for (let j = 1; j <= n - 2; j++) {
+      // Triangle (p0, pj, pj+1). Edge mask: the edge opposite p0 is
+      // (pj, pj+1) — always a true polygon edge; opposite pj is
+      // (pj+1, p0) — true only for the closing edge (j+1 == n-1);
+      // opposite pj+1 is (p0, pj) — true only for the first edge.
+      drawTriangle(pix32, zbuf, W, H,
+        pts[0], pts[j], pts[j + 1],
+        fill32, WHITE,
+        [true, j + 1 === n - 1, j === 1]);
     }
-    ctx.closePath();
-    ctx.fillStyle = panel.color;
-    ctx.fill();
-    ctx.stroke();
   }
 
+  offCtx.putImageData(imgData, 0, 0);
+  ctx.drawImage(offCanvas, 0, 0);
 }
 
 // Check if point q lies on segment pr
@@ -389,10 +391,6 @@ async function loadMaze(mazeName) {
       }
     }
   }
-
-  maze_triangles = panels.flatMap(panel =>
-    trianglize(panel.verts,"white",panel.color)
-  );
 
   draw();
   map = new Map(maze,document.getElementById('mapCanvas'),start_color,end_color);
