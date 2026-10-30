@@ -5,14 +5,14 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=4.1.6';
-import Maze from '../Maze.js?v=4.1.6';
-import Player from '../Player.js?v=4.1.6';
-import Map from '../Map.js?v=4.1.6';
-import { Rect3d } from "../Geometry.js?v=4.1.6";
-import { clearFrame, drawTriangle, packColor, WHITE } from '../Raster.js?v=4.1.6';
-import * as Multiplayer from '../Multiplayer.js?v=4.1.6';
-import { getUser } from '../Auth.js?v=4.1.6';
+import { getMazeData, listMazes } from '../MazeDB.js?v=4.2.0';
+import Maze from '../Maze.js?v=4.2.0';
+import Player from '../Player.js?v=4.2.0';
+import Map from '../Map.js?v=4.2.0';
+import { Rect3d } from "../Geometry.js?v=4.2.0";
+import { clearFrame, drawTriangle, drawTexturedTriangle, packColor, WHITE } from '../Raster.js?v=4.2.0';
+import * as Multiplayer from '../Multiplayer.js?v=4.2.0';
+import { getUser } from '../Auth.js?v=4.2.0';
 
 let maze, player, map;
 let canvas, ctx;
@@ -106,6 +106,34 @@ function clipAgainstNearPlane(verts, near=0.1) {
   return clipped;
 }
 
+// clipAgainstNearPlane for [x, y, z, u, v] verts (textured panels):
+// u and v are interpolated with the same t as the position.
+function clipWithUv(verts, near = 0.1) {
+  const clipped = [];
+  for (let i = 0; i < verts.length; i++) {
+    const curr = verts[i];
+    const next = verts[(i + 1) % verts.length];
+    const insideCurr = curr[2] >= near;
+    const insideNext = next[2] >= near;
+
+    if (insideCurr) {
+      clipped.push(curr);
+    }
+
+    if (insideCurr !== insideNext) {
+      const t = (near - curr[2]) / (next[2] - curr[2]);
+      clipped.push([
+        curr[0] + t * (next[0] - curr[0]),
+        curr[1] + t * (next[1] - curr[1]),
+        near,
+        curr[3] + t * (next[3] - curr[3]),
+        curr[4] + t * (next[4] - curr[4]),
+      ]);
+    }
+  }
+  return clipped;
+}
+
 function transformFor([x, y, z], px, pz, yaw) {
   // rotate a body-local point to match an angle and move to a location
   const rx = x * Math.cos(yaw) - z * Math.sin(yaw);
@@ -143,7 +171,7 @@ function myPos() {
 // direction and local +z onto their left, so x is the figure's
 // front-to-back thickness and z its left-to-right width. The wide
 // dimensions (legs stance 0.32, shoulders 0.38) run along z; the
-// thin ones (0.18 / 0.22) along x. (Before 4.1.6 these were
+// thin ones (0.18 / 0.22) along x. (Before 4.2.0 these were
 // swapped, which made the figure read as rotated 90°: narrow from
 // the front, wide from the side. The legs were also a single slab.)
 function personParts(color, s) {
@@ -157,14 +185,90 @@ function personParts(color, s) {
   };
 }
 
+// Profile photos as head-face textures. Google serves the photos
+// with CORS headers, so the browser can read their pixels: each
+// photo is drawn once into a small canvas and kept as packed pixels
+// in the rasterizer's own format (the ImageData buffer IS that
+// format). Loading is async — until a photo arrives (or if it
+// fails) the head renders in its flat lightened color as before.
+const PHOTO_SIZE = 64;
+const photoCache = Object.create(null); // url -> tex | 'loading' | 'failed'
+
+function photoTexture(url) {
+  const entry = photoCache[url];
+  if (entry) {
+    return entry === 'loading' || entry === 'failed' ? null : entry;
+  }
+  photoCache[url] = 'loading';
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = PHOTO_SIZE;
+      cv.height = PHOTO_SIZE;
+      const c2d = cv.getContext('2d');
+      c2d.drawImage(img, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
+      const idata = c2d.getImageData(0, 0, PHOTO_SIZE, PHOTO_SIZE);
+      photoCache[url] = { data: new Uint32Array(idata.data.buffer), w: PHOTO_SIZE, h: PHOTO_SIZE };
+    } catch {
+      photoCache[url] = 'failed';
+    }
+    draw(); // repaint with the face on (a no-op when unmounted)
+  };
+  img.onerror = () => {
+    photoCache[url] = 'failed';
+  };
+  img.src = url;
+  return null;
+}
+
+// UVs for a face quad from its local verts: u runs along z so the
+// photo appears unmirrored to someone facing the player (their
+// left-right matches the photo's), v runs 0 at the top to 1 at the
+// bottom, matching the texture's row order.
+function faceUvs(verts) {
+  let minZ = Infinity, maxZ = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [, y, z] of verts) {
+    minZ = Math.min(minZ, z);
+    maxZ = Math.max(maxZ, z);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  return verts.map(([, y, z]) => [
+    (z - minZ) / (maxZ - minZ),
+    (maxY - y) / (maxY - minY),
+  ]);
+}
+
 function personPanels(p) {
   const color = p.avatar_color || '#888888';
   const s = (typeof p.y === 'number' ? p.y : 0.5) / 0.5;
   const parts = personParts(color, s);
-  return [parts.legs, parts.torso, parts.head].flat(1).map(shape => ({
-    verts: shape.verts.map(v => transformFor(v, p.x, p.z, p.yaw)),
-    color: shape.color,
-  }));
+  const tex = p.picture ? photoTexture(p.picture) : null;
+  // The head's front face — every vert at the head's max local x,
+  // since +x is the facing direction — carries the photo.
+  let headMaxX = -Infinity;
+  for (const shape of parts.head) {
+    for (const v of shape.verts) {
+      headMaxX = Math.max(headMaxX, v[0]);
+    }
+  }
+  const panels = [];
+  const addPart = (shapes, isHead) => {
+    for (const shape of shapes) {
+      const verts = shape.verts.map(v => transformFor(v, p.x, p.z, p.yaw));
+      if (isHead && tex && shape.verts.every(v => v[0] === headMaxX)) {
+        panels.push({ verts, color: shape.color, tex, uvs: faceUvs(shape.verts) });
+      } else {
+        panels.push({ verts, color: shape.color });
+      }
+    }
+  };
+  addPart(parts.legs, false);
+  addPart(parts.torso, false);
+  addPart(parts.head, true);
+  return panels;
 }
 
 function ensureBuffers() {
@@ -229,6 +333,32 @@ function draw() {
   // into the rasterizer. The fan's internal diagonals are masked out
   // of edge painting so quads don't grow fake seams.
   for (const panel of everything) {
+    if (panel.tex) {
+      // Textured panel (a player's photo face): clip with uvs,
+      // project with u*invZ / v*invZ for perspective-correct mapping.
+      const camVerts = panel.verts.map((v, i) => [
+        ...toCameraSpace(v, player), panel.uvs[i][0], panel.uvs[i][1],
+      ]);
+      const clipped = clipWithUv(camVerts, panel.near ?? 0.1);
+      if (clipped.length < 3) {
+        continue;
+      }
+      const pts = clipped.map(([xc, yc, zc, u, v]) => [
+        W / 2 + fx * (xc / zc),
+        H / 2 - fy * (yc / zc),
+        1 / zc,
+        u / zc,
+        v / zc,
+      ]);
+      const n = pts.length;
+      for (let j = 1; j <= n - 2; j++) {
+        drawTexturedTriangle(pix32, zbuf, W, H,
+          pts[0], pts[j], pts[j + 1],
+          panel.tex, WHITE,
+          [true, j + 1 === n - 1, j === 1]);
+      }
+      continue;
+    }
     const camVerts = panel.verts.map(v => toCameraSpace(v, player));
     const clipped = clipAgainstNearPlane(camVerts, panel.near ?? 0.1);
     if (clipped.length < 3) {

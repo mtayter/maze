@@ -400,6 +400,7 @@ function rosterOf(room) {
     user_id: p.user_id,
     name: p.name,
     avatar_color: p.avatar_color,
+    picture: p.picture,
     x: p.x,
     z: p.z,
     yaw: p.yaw,
@@ -466,6 +467,7 @@ app.post('/app/maze/presence', requireAuth, (req, res) => {
     user_id: req.user.user_id,
     name: req.user.name,
     avatar_color: req.user.avatar_color,
+    picture: req.user.picture,
     x, z, yaw, y,
     updatedAt: Date.now(),
   });
