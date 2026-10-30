@@ -3,9 +3,9 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.8.1';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.8.1';
-import { openMazePicker } from '../MazePicker.js?v=4.8.1';
+import Maze from '../Maze.js?v=4.8.2';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.8.2';
+import { openMazePicker } from '../MazePicker.js?v=4.8.2';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -193,13 +193,16 @@ async function delete_maze() {
     refreshSaveState();
     return;
   }
-  // The drawing stays on screen as a new, unsaved maze under the
-  // same (now free) name — Add brings it back if that was a mistake.
+  // The maze is gone, name and all: the drawing stays on screen
+  // as an unnamed sketch, and the editor is clean — the delete
+  // was a confirmed act, not pending work, so New / Load /
+  // leaving must not warn. Any further edit re-arms the warnings.
   lastLoaded = '';
-  savedName = name;
+  savedName = '';
   loadedMine = true;
   loadedOwnerName = '';
-  setDirty(true);
+  document.getElementById('name').value = '';
+  setDirty(false);
   await populateMazeOwners();
   clearNameError();
   refreshSaveState();
