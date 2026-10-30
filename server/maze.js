@@ -342,11 +342,34 @@ app.post('/app/maze/logout', async (req, res) => {
   try {
     const token = parseCookies(req)[SESSION_COOKIE];
     if (token) {
-      await withDb(async (db) => {
+      const tokenHash = sha256Hex(token);
+      const userId = await withDb(async (db) => {
+        const [rows] = await db.execute(
+          'SELECT user_id FROM session WHERE token_hash = ?', [tokenHash]);
         await db.execute(
           'UPDATE session SET ended_at = ? WHERE token_hash = ? AND ended_at IS NULL',
-          [utcStr(new Date()), sha256Hex(token)]);
+          [utcStr(new Date()), tokenHash]);
+        if (rows.length === 0) return null;
+        // Other live sessions (the same account in another browser)
+        // keep the player's presence; the last one out leaves.
+        const [live] = await db.execute(
+          `SELECT COUNT(*) AS n FROM session
+           WHERE user_id = ? AND ended_at IS NULL AND expires_at > ?`,
+          [rows[0].user_id, utcStr(new Date())]);
+        return live[0].n > 0 ? null : rows[0].user_id;
       });
+      if (userId !== null) {
+        // Logout leaves every maze at once, immediately: the roster
+        // broadcast reaches the remaining players over SSE instead
+        // of them watching a ghost until the presence TTL sweep.
+        // (The client's own leave call can't do this job — it goes
+        // out after the session is already ended and gets a 401.)
+        for (const [name, room] of rooms) {
+          if (room.players.delete(userId)) {
+            broadcastPresence(name);
+          }
+        }
+      }
     }
     res.setHeader('Set-Cookie',
       `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure`);
