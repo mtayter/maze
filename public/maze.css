@@ -80,7 +80,7 @@ body {
   color: var(--text);
   text-decoration: none;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 16px;
   min-height: 40px;
   padding: 8px 14px;
   border-radius: 999px;
@@ -115,11 +115,10 @@ body.signed-out .shell-nav { display: none; }
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.65);
 }
-.user-name { font-weight: 600; font-size: 14px; }
+.user-name { font-weight: 600; font-size: 16px; }
 .signout-btn {
   min-height: 36px;
   padding: 6px 12px;
-  font-size: 13px;
 }
 
 /* ---------- Sign-in view ---------- */
@@ -277,7 +276,7 @@ body.signed-out .shell-nav { display: none; }
 .name-error {
   flex-basis: 100%;
   color: #dc2626;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 .name-error:empty { display: none; }
@@ -331,7 +330,7 @@ body.signed-out .shell-nav { display: none; }
   border-radius: 999px;
   padding: 8px 8px 8px 18px;
   box-shadow: var(--shadow);
-  font-size: 15px;
+  font-size: 16px;
   max-width: calc(100vw - 24px);
 }
 #updateBanner.show { display: flex; }
@@ -346,7 +345,7 @@ body.signed-out .shell-nav { display: none; }
   color: var(--text);
   font: inherit;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 16px;
   min-height: var(--tap);
   padding: 10px 16px;
   border-radius: 999px;
@@ -387,6 +386,12 @@ body.signed-out .shell-nav { display: none; }
   font-weight: 600;
 }
 .delete-confirm[hidden] { display: none; }
+/* The save and delete buttons are a unit: never split across lines. */
+.action-row {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
 .btn[aria-pressed="true"] {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -397,7 +402,7 @@ body.signed-out .shell-nav { display: none; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text-dim);
 }
@@ -428,6 +433,7 @@ select option {
 /* Segmented tool picker (editor) */
 .segmented {
   display: inline-flex;
+  flex-wrap: nowrap;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--panel-border);
   border-radius: 999px;
@@ -438,7 +444,8 @@ select option {
   min-height: 40px;
   padding: 8px 16px;
   border-radius: 999px;
-  font-size: 15px;
+  font-size: 16px;
+  white-space: nowrap;
   font-weight: 600;
   color: var(--text-dim);
   cursor: pointer;
@@ -505,7 +512,7 @@ canvas.game-canvas {
 #topbar .icon-btn {
   min-width: var(--tap);
   padding: 10px 12px;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .hint-pill {
@@ -518,7 +525,7 @@ canvas.game-canvas {
   border: 1px solid var(--panel-border);
   border-radius: 999px;
   padding: 8px 16px;
-  font-size: 13.5px;
+  font-size: 12px;
   color: var(--text-dim);
   white-space: nowrap;
   pointer-events: none;
@@ -578,7 +585,7 @@ canvas.game-canvas {
 .pad .btn:active { background: var(--accent-soft); }
 .pad .spacer { visibility: hidden; }
 .pad .pad-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--text-dim);
@@ -609,7 +616,7 @@ canvas.game-canvas {
     min-width: 58px;
     min-height: 50px;
     padding: 6px 2px;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.15;
     justify-content: center;
     text-align: center;
@@ -658,7 +665,7 @@ canvas.game-canvas {
 }
 .win-card .win-emoji { font-size: 52px; line-height: 1; }
 .win-card h2 { margin: 12px 0 6px; font-size: 26px; }
-.win-card p { margin: 0 0 18px; color: var(--text-dim); font-size: 15px; }
+.win-card p { margin: 0 0 18px; color: var(--text-dim); font-size: 16px; }
 @keyframes pop {
   from { transform: scale(0.9); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
@@ -692,7 +699,7 @@ canvas.game-canvas {
   flex-wrap: wrap;
 }
 .editor-group .group-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--text-dim);
@@ -761,14 +768,14 @@ canvas.editor-canvas {
     flex-direction: column;
     flex-wrap: nowrap;
     align-items: stretch;
-    width: 268px;
+    width: 304px;
     overflow-y: auto;
     gap: 16px;
   }
   .editor-group-nowrap { flex-wrap: wrap; }
   .editor-bar .stack-field { width: 100%; }
   .editor-bar .stack-field select { width: 100%; }
-  .editor-bar .segmented { flex-wrap: wrap; }
+  .editor-bar .segmented label { padding: 8px 12px; }
   .editor-bar .field:has(#name) { flex: 1 1 110px; }
   .editor-bar #name { width: 100%; }
 }

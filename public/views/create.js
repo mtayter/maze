@@ -3,8 +3,8 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.4.0';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.4.0';
+import Maze from '../Maze.js?v=4.5.0';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.5.0';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -53,21 +53,23 @@ function nameStatus() {
   return 'free';
 }
 
-// All three action buttons are always visible; each is enabled
+// The save and delete buttons are always visible; each is enabled
 // exactly when clicking it would work, driven by the name field
-// (see nameStatus). Add creates a maze under a fresh, non-blank
-// name; Update and Delete act on your own loaded maze. Any state
-// refresh also closes the delete confirmation.
+// (see nameStatus). The save button is one button with two
+// identities: ➕ Add for a fresh, non-blank name, 💾 Update when
+// the name is your own loaded maze — which is also the only state
+// where Delete is enabled. Any state refresh also closes the
+// delete confirmation.
 function refreshSaveState() {
-  const addBtn = document.getElementById('addBtn');
-  if (!addBtn) return;
-  const updateBtn = document.getElementById('updateBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  if (!saveBtn) return;
   const deleteBtn = document.getElementById('deleteBtn');
   hideDeleteConfirm();
   const status = nameStatus();
-  addBtn.disabled = status !== 'free';
-  updateBtn.disabled = status !== 'own';
-  deleteBtn.disabled = status !== 'own';
+  const own = status === 'own';
+  saveBtn.textContent = own ? '💾 Update' : '➕ Add';
+  saveBtn.disabled = !(own || status === 'free');
+  deleteBtn.disabled = !own;
 }
 
 function showDeleteConfirm() {
@@ -370,9 +372,10 @@ export async function mount(el, shared) {
       <div class="editor-group">
         <span class="group-label">Name</span>
         <label class="field"><input type="text" id="name" placeholder="Maze name" size="12"></label>
-        <button class="btn btn-primary" id="addBtn" type="button">➕ Add</button>
-        <button class="btn btn-primary" id="updateBtn" type="button">💾 Update</button>
-        <button class="btn btn-danger" id="deleteBtn" type="button">🗑️ Delete</button>
+        <span class="action-row">
+          <button class="btn btn-primary" id="saveBtn" type="button">➕ Add</button>
+          <button class="btn btn-danger" id="deleteBtn" type="button">🗑️ Delete</button>
+        </span>
         <span class="delete-confirm" id="deleteConfirm" hidden>
           <span id="deleteConfirmText"></span>
           <button class="btn btn-danger" id="deleteYesBtn" type="button">Yes, delete</button>
@@ -392,10 +395,7 @@ export async function mount(el, shared) {
     draw_blank_maze();
   }, { signal });
 
-  document.getElementById('addBtn').addEventListener('click', () => {
-    save_maze();
-  }, { signal });
-  document.getElementById('updateBtn').addEventListener('click', () => {
+  document.getElementById('saveBtn').addEventListener('click', () => {
     save_maze();
   }, { signal });
   document.getElementById('deleteBtn').addEventListener('click', () => {
