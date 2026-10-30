@@ -3,8 +3,8 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.3.2';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.3.2';
+import Maze from '../Maze.js?v=4.4.0';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.4.0';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -339,7 +339,7 @@ export async function mount(el, shared) {
         <span class="group-label">Size</span>
         <label class="field">W <input type="number" id="width" min="1" max="40" inputmode="numeric" value="10"></label>
         <label class="field">H <input type="number" id="height" min="1" max="40" inputmode="numeric" value="10"></label>
-        <button class="btn" id="reloadBtn" type="button">🧹 New blank</button>
+        <button class="btn" id="reloadBtn" type="button">🧹 New</button>
       </div>
       <div class="editor-group">
         <span class="group-label">Tap places…</span>
@@ -359,13 +359,13 @@ export async function mount(el, shared) {
             <option value="w">⬅️ West</option>
           </select>
         </div>
-        <div class="stack-field">
-          <span class="group-label">Load</span>
-          <select id="mazeSelect" aria-label="Load a maze">
-            <option value="">Load…</option>
-          </select>
-          <span class="owner-note" id="ownerNote"></span>
-        </div>
+      </div>
+      <div class="stack-field">
+        <span class="group-label">Load</span>
+        <select id="mazeSelect" aria-label="Load a maze">
+          <option value="">Load…</option>
+        </select>
+        <span class="owner-note" id="ownerNote"></span>
       </div>
       <div class="editor-group">
         <span class="group-label">Name</span>

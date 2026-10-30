@@ -751,3 +751,24 @@ canvas.editor-canvas {
   .editor-group { flex: 1 1 auto; }
   .editor-group .group-label { width: auto; }
 }
+
+/* Landscape with room to spare (desktop, phone on its side): the
+   editor controls become a left rail, so the canvas keeps the full
+   height of the window instead of losing a toolbar's worth. */
+@media (orientation: landscape) and (min-width: 600px) {
+  .view-create { flex-direction: row; }
+  .editor-bar {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    width: 268px;
+    overflow-y: auto;
+    gap: 16px;
+  }
+  .editor-group-nowrap { flex-wrap: wrap; }
+  .editor-bar .stack-field { width: 100%; }
+  .editor-bar .stack-field select { width: 100%; }
+  .editor-bar .segmented { flex-wrap: wrap; }
+  .editor-bar .field:has(#name) { flex: 1 1 110px; }
+  .editor-bar #name { width: 100%; }
+}
