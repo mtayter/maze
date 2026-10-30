@@ -1,4 +1,4 @@
-import Maze from './Maze.js?v=4.5.1';
+import Maze from './Maze.js?v=4.6.0';
 
 // The API gates everything behind the session cookie. A 401 means the
 // session is gone: tell the shell (Auth listens for this) and fail the

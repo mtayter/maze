@@ -5,15 +5,15 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=4.5.1';
-import { guardSelect } from '../SelectGuard.js?v=4.5.1';
-import Maze from '../Maze.js?v=4.5.1';
-import Player from '../Player.js?v=4.5.1';
-import Map from '../Map.js?v=4.5.1';
-import { Rect3d } from "../Geometry.js?v=4.5.1";
-import { clearFrame, drawTriangle, drawTexturedTriangle, packColor, WHITE } from '../Raster.js?v=4.5.1';
-import * as Multiplayer from '../Multiplayer.js?v=4.5.1';
-import { getUser } from '../Auth.js?v=4.5.1';
+import { getMazeData } from '../MazeDB.js?v=4.6.0';
+import { openMazePicker } from '../MazePicker.js?v=4.6.0';
+import Maze from '../Maze.js?v=4.6.0';
+import Player from '../Player.js?v=4.6.0';
+import Map from '../Map.js?v=4.6.0';
+import { Rect3d } from "../Geometry.js?v=4.6.0";
+import { clearFrame, drawTriangle, drawTexturedTriangle, packColor, WHITE } from '../Raster.js?v=4.6.0';
+import * as Multiplayer from '../Multiplayer.js?v=4.6.0';
+import { getUser } from '../Auth.js?v=4.6.0';
 
 let maze, player, map;
 let canvas, ctx;
@@ -172,7 +172,7 @@ function myPos() {
 // direction and local +z onto their left, so x is the figure's
 // front-to-back thickness and z its left-to-right width. The wide
 // dimensions (legs stance 0.32, shoulders 0.38) run along z; the
-// thin ones (0.18 / 0.22) along x. (Before 4.5.1 these were
+// thin ones (0.18 / 0.22) along x. (Before 4.6.0 these were
 // swapped, which made the figure read as rotated 90°: narrow from
 // the front, wide from the side. The legs were also a single slab.)
 function personParts(color, s) {
@@ -528,13 +528,11 @@ function toggleMap() {
   setMapVisible(!mapPinned);
 }
 
-async function populateMazeSelect() {
-  const mazeSelect = document.getElementById('mazeSelect');
-  let mazes = await listMazes();
-  mazeSelect.length = 1;
-  mazes.forEach(m => {
-    mazeSelect.add(new Option(m.name, m.name));
-  });
+function updateMazeButton() {
+  const btn = document.getElementById('mazePickBtn');
+  if (btn) {
+    btn.textContent = lastMaze ? `🗺️ ${lastMaze}` : '🗺️ Pick a maze…';
+  }
 }
 
 async function loadMaze(mazeName) {
@@ -686,11 +684,9 @@ export async function mount(el, shared) {
     <canvas id="mazeCanvas" class="game-canvas"></canvas>
     <canvas id="mapCanvas"></canvas>
     <div id="topbar">
-      <label class="field" for="mazeSelect">
-        <select id="mazeSelect" aria-label="Choose a maze">
-          <option value="">Pick a maze…</option>
-        </select>
-      </label>
+      <span class="field">
+        <button class="btn" id="mazePickBtn" type="button">🗺️ Pick a maze…</button>
+      </span>
     </div>
     <div class="hint-pill">WASD to move &nbsp;·&nbsp; Arrows to turn &amp; look &nbsp;·&nbsp; T / G grow &amp; shrink &nbsp;·&nbsp; Hold M for map &nbsp;·&nbsp; Drag to look around</div>
     <div class="touch-controls" aria-label="Touch controls">
@@ -753,32 +749,33 @@ export async function mount(el, shared) {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  await populateMazeSelect();
-
-  const mazeSelect = document.getElementById("mazeSelect");
+  updateMazeButton();
   if (lastMaze) {
-    mazeSelect.value = lastMaze;
-    if (mazeSelect.value === lastMaze) {
-      await loadMaze(lastMaze);
+    await loadMaze(lastMaze);
+    if (!maze) {
+      // The remembered maze is gone (deleted since) — forget it.
+      lastMaze = '';
+      updateMazeButton();
     }
   }
-  guardSelect(mazeSelect, async () => {
-    lastMaze = mazeSelect.value;
-    restoreState = null; // a freshly picked maze starts at its start
-    if(mazeSelect.value != '') {
-      try {
-        mazeSelect.blur();
-        await loadMaze(mazeSelect.value);
-      } catch (err) {
-        console.error('Failed to get maze data:', err);
-      }
-    } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-  }, signal);
+
+  document.getElementById('mazePickBtn').addEventListener('click', () => {
+    openMazePicker({
+      container: el,
+      title: 'Choose a maze',
+      current: lastMaze,
+      signal,
+      onPick: async (name) => {
+        lastMaze = name;
+        restoreState = null; // a freshly picked maze starts at its start
+        updateMazeButton();
+        await loadMaze(name);
+      },
+    });
+  }, { signal });
 
   document.getElementById('mapBtn').addEventListener('click', () => {
-    if (mazeSelect.value != '') toggleMap();
+    if (lastMaze) toggleMap();
   }, { signal });
   document.getElementById('growBtn').addEventListener('click', grow, { signal });
   document.getElementById('shrinkBtn').addEventListener('click', shrink, { signal });
@@ -853,7 +850,7 @@ export async function mount(el, shared) {
       if(e.repeat) {
         return;
       }
-      if(mazeSelect.value != '' && map) {
+      if(lastMaze && map) {
         map.show();
         map.resize();
         map.draw();

@@ -3,9 +3,9 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.5.1';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.5.1';
-import { guardSelect } from '../SelectGuard.js?v=4.5.1';
+import Maze from '../Maze.js?v=4.6.0';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.6.0';
+import { openMazePicker } from '../MazePicker.js?v=4.6.0';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -59,8 +59,10 @@ function nameStatus() {
 // (see nameStatus). The save button is one button with two
 // identities: ➕ Add for a fresh, non-blank name, 💾 Update when
 // the name is your own loaded maze — which is also the only state
-// where Delete is enabled. Any state refresh also closes the
-// delete confirmation.
+// where Delete is enabled. The size inputs lock while an existing
+// maze is loaded: a saved maze's dimensions are its wall arrays,
+// chosen when it was created blank. Any state refresh also closes
+// the delete confirmation.
 function refreshSaveState() {
   const saveBtn = document.getElementById('saveBtn');
   if (!saveBtn) return;
@@ -71,6 +73,11 @@ function refreshSaveState() {
   saveBtn.textContent = own ? '💾 Update' : '➕ Add';
   saveBtn.disabled = !(own || status === 'free');
   deleteBtn.disabled = !own;
+  const sizeLocked = lastLoaded !== '';
+  const widthEl = document.getElementById('width');
+  const heightEl = document.getElementById('height');
+  if (widthEl) widthEl.disabled = sizeLocked;
+  if (heightEl) heightEl.disabled = sizeLocked;
 }
 
 function showDeleteConfirm() {
@@ -116,12 +123,7 @@ async function save_maze() {
     alert('Place a start (red) and an end (green) square first.');
     return;
   }
-  let taken = false;
-  document.querySelector('#mazeSelect').querySelectorAll('option').forEach(maze => {
-    if(new_maze == maze.value) {
-      taken = true;
-    }
-  });
+  const taken = Object.prototype.hasOwnProperty.call(mazeOwners, new_maze);
   // Saving over the maze you loaded is fine when it's yours.
   if (taken && !(new_maze === lastLoaded && loadedMine)) {
     alert(loadedMine || new_maze !== lastLoaded
@@ -144,8 +146,7 @@ async function save_maze() {
   savedName = new_maze;
   loadedMine = true;
   loadedOwnerName = '';
-  await populateMazeSelect();
-  document.querySelector('#mazeSelect').value = new_maze;
+  await populateMazeOwners();
   updateOwnerNote();
   clearNameError();
   refreshSaveState();
@@ -174,8 +175,7 @@ async function delete_maze() {
   loadedMine = true;
   loadedOwnerName = '';
   setDirty(true);
-  await populateMazeSelect();
-  document.querySelector('#mazeSelect').value = '';
+  await populateMazeOwners();
   updateOwnerNote();
   clearNameError();
   refreshSaveState();
@@ -200,6 +200,35 @@ function createbox(x0, y0, color) {
   ctx.fillStyle = color;
   ctx.lineWidth = 10;
   ctx.fillRect(x(x0)+ctx.lineWidth, y(y0+1)+ctx.lineWidth, cell_size - ctx.lineWidth*2, cell_size - ctx.lineWidth*2);
+}
+
+// The start square carries a white arrow in the facing direction
+// (the Start facing dropdown), so the spawn heading reads at a
+// glance. Screen space works out cleanly: the editor flips data-y
+// when drawing, and Maze's direction table makes north data +y —
+// so north is up here, east right, and so on.
+function drawStartArrow() {
+  const sel = document.querySelector('#directionSelect');
+  const dir = (sel && sel.value) || savedDirection;
+  const rot = { n: 0, e: Math.PI / 2, s: Math.PI, w: -Math.PI / 2 }[dir] || 0;
+  const cx = x(startX) + cell_size / 2;
+  const cy = y(startY + 1) + cell_size / 2;
+  const a = cell_size * 0.27;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(0, -a);
+  ctx.lineTo(a * 0.78, -a * 0.12);
+  ctx.lineTo(a * 0.34, -a * 0.12);
+  ctx.lineTo(a * 0.34, a * 0.85);
+  ctx.lineTo(-a * 0.34, a * 0.85);
+  ctx.lineTo(-a * 0.34, -a * 0.12);
+  ctx.lineTo(-a * 0.78, -a * 0.12);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 function layout() {
@@ -230,7 +259,10 @@ function render() {
       createline(x, y, x, y + 1, v[y][x] ? '#000000' : '#e2e8f0');
     }
   }
-  if (startX > -1) createbox(startX, startY, '#f00000');
+  if (startX > -1) {
+    createbox(startX, startY, '#f00000');
+    drawStartArrow();
+  }
   if (endX > -1) createbox(endX, endY, '#00c853');
 }
 
@@ -248,7 +280,6 @@ function draw_blank_maze() {
   document.getElementById("name").value = "";
   document.querySelector('input[name="selectorRadio"][value="walls"]').click();
   document.getElementById("directionSelect").selectedIndex = 0;
-  document.getElementById("mazeSelect").selectedIndex = 0;
 
   // Horizontal walls
   h = [];
@@ -306,16 +337,13 @@ function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, di
   refreshSaveState();
 }
 
-async function populateMazeSelect() {
-  const mazeSelect = document.getElementById('mazeSelect');
+// The name rules need to know every maze's owner; the picker
+// dialog fetches the same (cached) list itself when opened.
+async function populateMazeOwners() {
   let mazes = await listMazes();
   mazeOwners = {};
   mazes.forEach(maze => {
     mazeOwners[maze.name] = { owner_name: maze.owner_name, mine: maze.mine };
-  });
-  mazeSelect.length = 1;
-  mazes.forEach(maze => {
-    mazeSelect.add(new Option(maze.name, maze.name));
   });
   refreshSaveState();
 }
@@ -338,11 +366,17 @@ export async function mount(el, shared) {
   el.className = 'view-create';
   el.innerHTML = `
     <header class="editor-bar">
+      <div class="stack-field">
+        <span class="action-row">
+          <button class="btn" id="reloadBtn" type="button">🧹 New</button>
+          <button class="btn" id="loadBtn" type="button">📂 Load</button>
+        </span>
+        <span class="owner-note" id="ownerNote"></span>
+      </div>
       <div class="editor-group">
         <span class="group-label">Size</span>
         <label class="field">W <input type="number" id="width" min="1" max="40" inputmode="numeric" value="10"></label>
         <label class="field">H <input type="number" id="height" min="1" max="40" inputmode="numeric" value="10"></label>
-        <button class="btn" id="reloadBtn" type="button">🧹 New</button>
       </div>
       <div class="editor-group">
         <span class="group-label">Tap places…</span>
@@ -362,13 +396,6 @@ export async function mount(el, shared) {
             <option value="w">⬅️ West</option>
           </select>
         </div>
-      </div>
-      <div class="stack-field">
-        <span class="group-label">Load</span>
-        <select id="mazeSelect" aria-label="Load a maze">
-          <option value="">Load…</option>
-        </select>
-        <span class="owner-note" id="ownerNote"></span>
       </div>
       <div class="editor-group">
         <span class="group-label">Name</span>
@@ -461,29 +488,32 @@ export async function mount(el, shared) {
     draw_blank_maze();
   }
 
-  const mazeSelect = document.getElementById("mazeSelect");
-  await populateMazeSelect();
-  if (hasState && lastLoaded) {
-    mazeSelect.value = lastLoaded;
-  }
+  await populateMazeOwners();
   updateOwnerNote();
   refreshSaveState();
 
-  guardSelect(mazeSelect, async () => {
-    if(mazeSelect.value != '') {
-      try {
-        const data = await getMazeData(mazeSelect.value);
-        draw_loaded_maze(mazeSelect.value, data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction, data.owner_name, data.mine);
-      } catch (err) {
-        console.error('Failed to get maze data:', err);
-        alert(`Couldn't load “${mazeSelect.value}”. The maze server hiccuped — try again in a moment.`);
-      }
-    } else {
-      document.getElementById('width').value = 10;
-      document.getElementById('height').value = 10;
-      draw_blank_maze();
-    }
-  }, signal);
+  document.querySelector('#directionSelect').addEventListener('change', (e) => {
+    savedDirection = e.target.value;
+    render();
+  }, { signal });
+
+  document.getElementById('loadBtn').addEventListener('click', () => {
+    openMazePicker({
+      container: el,
+      title: 'Load a maze',
+      current: lastLoaded,
+      signal,
+      onPick: async (name) => {
+        try {
+          const data = await getMazeData(name);
+          draw_loaded_maze(name, data.h, data.v, data.start_x, data.start_y, data.end_x, data.end_y, data.direction, data.owner_name, data.mine);
+        } catch (err) {
+          console.error('Failed to get maze data:', err);
+          alert(`Couldn't load “${name}”. The maze server hiccuped — try again in a moment.`);
+        }
+      },
+    });
+  }, { signal });
 
   canvas.addEventListener("pointerdown", function(event) {
     if (!event.isPrimary) return;
