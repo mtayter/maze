@@ -3,9 +3,9 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.8.0';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.8.0';
-import { openMazePicker } from '../MazePicker.js?v=4.8.0';
+import Maze from '../Maze.js?v=4.8.1';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.8.1';
+import { openMazePicker } from '../MazePicker.js?v=4.8.1';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -125,6 +125,18 @@ function setDirty(dirty) {
   if (sharedRef) {
     sharedRef.editorDirty = dirty;
   }
+}
+
+function isDirty() {
+  return !!(sharedRef && sharedRef.editorDirty);
+}
+
+// New and Load both replace the drawing wholesale; with unsaved
+// edits either one is a loss, so they ask first — the same dirty
+// flag that arms the browser's exit warning in the shell.
+function confirmDiscard(action) {
+  return !isDirty() ||
+    confirm(`You have unsaved edits — ${action} will lose them. Continue?`);
 }
 
 async function save_maze() {
@@ -549,7 +561,9 @@ export async function mount(el, shared) {
   const reloadBtn = document.getElementById('reloadBtn');
 
   reloadBtn.addEventListener('click', () => {
-    draw_blank_maze();
+    if (confirmDiscard('starting a new maze')) {
+      draw_blank_maze();
+    }
   }, { signal });
 
   document.getElementById('saveBtn').addEventListener('click', () => {
@@ -631,6 +645,7 @@ export async function mount(el, shared) {
   }, { signal });
 
   document.getElementById('loadBtn').addEventListener('click', () => {
+    if (!confirmDiscard('loading another maze')) return;
     openMazePicker({
       container: el,
       title: 'Load a maze',
