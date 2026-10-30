@@ -3,8 +3,9 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.5.0';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.5.0';
+import Maze from '../Maze.js?v=4.5.1';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.5.1';
+import { guardSelect } from '../SelectGuard.js?v=4.5.1';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -468,7 +469,7 @@ export async function mount(el, shared) {
   updateOwnerNote();
   refreshSaveState();
 
-  mazeSelect.addEventListener('change', async () => {
+  guardSelect(mazeSelect, async () => {
     if(mazeSelect.value != '') {
       try {
         const data = await getMazeData(mazeSelect.value);
@@ -482,7 +483,7 @@ export async function mount(el, shared) {
       document.getElementById('height').value = 10;
       draw_blank_maze();
     }
-  }, { signal });
+  }, signal);
 
   canvas.addEventListener("pointerdown", function(event) {
     if (!event.isPrimary) return;
