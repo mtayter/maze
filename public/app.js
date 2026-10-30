@@ -11,15 +11,25 @@
 // state is the editor's dirty flag, so the version check never
 // force-reloads over unsaved work.
 
-import { mount as mountPlay, unmount as unmountPlay } from './views/play.js?v=4.7.0';
-import { mount as mountCreate, unmount as unmountCreate } from './views/create.js?v=4.7.0';
-import { mount as mountSettings, unmount as unmountSettings } from './views/settings.js?v=4.7.0';
-import { mount as mountAdmin, unmount as unmountAdmin } from './views/admin.js?v=4.7.0';
-import { initAuth, getUser, renderSignIn, signOut } from './Auth.js?v=4.7.0';
+import { mount as mountPlay, unmount as unmountPlay } from './views/play.js?v=4.8.0';
+import { mount as mountCreate, unmount as unmountCreate } from './views/create.js?v=4.8.0';
+import { mount as mountSettings, unmount as unmountSettings } from './views/settings.js?v=4.8.0';
+import { mount as mountAdmin, unmount as unmountAdmin } from './views/admin.js?v=4.8.0';
+import { initAuth, getUser, renderSignIn, signOut } from './Auth.js?v=4.8.0';
 
 const shared = {
   editorDirty: false,
 };
+
+// Leaving the site (close, reload, navigate away) with unsaved
+// editor work loses it — in-app view switches don't, the editor
+// restores its state — so only the browser-level exit warns, and
+// only while the editor is dirty.
+window.addEventListener('beforeunload', (e) => {
+  if (shared.editorDirty) {
+    e.preventDefault();
+  }
+});
 
 const VIEWS = {
   play: { mount: mountPlay, unmount: unmountPlay, title: 'Do Maze', nav: 'navPlay' },

@@ -3,9 +3,9 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.7.0';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.7.0';
-import { openMazePicker } from '../MazePicker.js?v=4.7.0';
+import Maze from '../Maze.js?v=4.8.0';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.8.0';
+import { openMazePicker } from '../MazePicker.js?v=4.8.0';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -30,15 +30,6 @@ let mazeOwners = {};
 // Name field value when it gained focus (blur-error guard).
 let nameAtFocus = null;
 
-function updateOwnerNote() {
-  const note = document.getElementById('ownerNote');
-  if (!note) return;
-  if (!lastLoaded || loadedMine) {
-    note.textContent = '';
-  } else {
-    note.textContent = `👤 By ${loadedOwnerName || 'another player'} — rename to save your copy`;
-  }
-}
 
 // Save availability, driven by the name field: blank names keep Save
 // enabled (clicking explains a name is needed); the loaded maze's own
@@ -98,7 +89,6 @@ function copy_maze() {
   const nameInput = document.getElementById('name');
   nameInput.value = '';
   setDirty(true);
-  updateOwnerNote();
   clearNameError();
   refreshSaveState();
   nameInput.focus();
@@ -171,7 +161,6 @@ async function save_maze() {
   loadedMine = true;
   loadedOwnerName = '';
   await populateMazeOwners();
-  updateOwnerNote();
   clearNameError();
   refreshSaveState();
 }
@@ -200,7 +189,6 @@ async function delete_maze() {
   loadedOwnerName = '';
   setDirty(true);
   await populateMazeOwners();
-  updateOwnerNote();
   clearNameError();
   refreshSaveState();
   alert(`Deleted “${name}”.`);
@@ -296,6 +284,7 @@ function applySize() {
     h.length = newW;
     for (let cy = 0; cy < v.length; cy++) {
       v[cy].length = newW + 1;
+      v[cy][newW] = 1; // the new right edge is a proper border
     }
     if (startX >= newW) startX = startY = -1;
     if (endX >= newW) endX = endY = -1;
@@ -305,6 +294,7 @@ function applySize() {
     v.splice(0, drop);
     for (let cx = 0; cx < h.length; cx++) {
       h[cx].splice(0, drop);
+      h[cx][0] = 1; // the new bottom edge is a proper border
     }
     if (startY >= 0) {
       if (startY < drop) startX = startY = -1;
@@ -442,7 +432,6 @@ function draw_blank_maze() {
 
   setDirty(false);
   render();
-  updateOwnerNote();
   clearNameError();
   refreshSaveState();
 }
@@ -473,7 +462,6 @@ function draw_loaded_maze(name, new_h, new_v, start_x, start_y, end_x, end_y, di
 
   setDirty(false);
   render();
-  updateOwnerNote();
   clearNameError();
   refreshSaveState();
 }
@@ -512,7 +500,6 @@ export async function mount(el, shared) {
           <button class="btn" id="reloadBtn" type="button">🧹 New</button>
           <button class="btn" id="loadBtn" type="button">📂 Load</button>
         </span>
-        <span class="owner-note" id="ownerNote"></span>
       </div>
       <div class="editor-group">
         <span class="group-label">Size</span>
@@ -636,7 +623,6 @@ export async function mount(el, shared) {
   }
 
   await populateMazeOwners();
-  updateOwnerNote();
   refreshSaveState();
 
   document.querySelector('#directionSelect').addEventListener('change', (e) => {

@@ -1,4 +1,4 @@
-import { listMazes } from './MazeDB.js?v=4.7.0';
+import { listMazes } from './MazeDB.js?v=4.8.0';
 
 // A dialog listing every maze — name plus owner — with each name a
 // pick target. This replaces the native <select> maze pickers: a
@@ -53,23 +53,35 @@ export function openMazePicker({ container, title, current, onPick, signal }) {
       list.textContent = 'No mazes yet.';
       return;
     }
-    for (const m of mazes) {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'picker-row' + (m.name === current ? ' current' : '');
-      const name = document.createElement('span');
-      name.className = 'picker-name';
-      name.textContent = m.name;
-      const owner = document.createElement('span');
-      owner.className = 'picker-owner';
-      owner.textContent = m.mine ? 'You' : (m.owner_name || '');
-      row.append(name, owner);
-      row.addEventListener('click', () => {
-        close();
-        onPick(m.name);
-      });
-      list.appendChild(row);
-    }
+    const renderSection = (label, group, showOwner) => {
+      if (group.length === 0) return;
+      const head = document.createElement('div');
+      head.className = 'picker-section';
+      head.textContent = label;
+      list.appendChild(head);
+      for (const m of group) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'picker-row' + (m.name === current ? ' current' : '');
+        const name = document.createElement('span');
+        name.className = 'picker-name';
+        name.textContent = m.name;
+        row.appendChild(name);
+        if (showOwner) {
+          const owner = document.createElement('span');
+          owner.className = 'picker-owner';
+          owner.textContent = m.owner_name || '';
+          row.appendChild(owner);
+        }
+        row.addEventListener('click', () => {
+          close();
+          onPick(m.name);
+        });
+        list.appendChild(row);
+      }
+    };
+    renderSection('Your mazes', mazes.filter((m) => m.mine), false);
+    renderSection('Other mazes', mazes.filter((m) => !m.mine), true);
   }).catch(() => {
     if (backdrop.isConnected) {
       list.textContent = 'Could not load the maze list.';
