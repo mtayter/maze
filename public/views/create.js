@@ -3,8 +3,8 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.3.0';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.3.0';
+import Maze from '../Maze.js?v=4.3.1';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.3.1';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -52,11 +52,11 @@ function nameStatus() {
   return 'free';
 }
 
-// Which action buttons exist is driven by the name field (see
-// nameStatus): your own loaded maze gets Update + Delete; anything
-// else is an Add (a brand-new maze, or your copy of someone else's),
-// disabled while the name is taken. Any state refresh also closes
-// the delete confirmation.
+// All three action buttons are always visible; each is enabled
+// exactly when clicking it would work, driven by the name field
+// (see nameStatus). Add creates a maze under a fresh, non-blank
+// name; Update and Delete act on your own loaded maze. Any state
+// refresh also closes the delete confirmation.
 function refreshSaveState() {
   const addBtn = document.getElementById('addBtn');
   if (!addBtn) return;
@@ -64,21 +64,17 @@ function refreshSaveState() {
   const deleteBtn = document.getElementById('deleteBtn');
   hideDeleteConfirm();
   const status = nameStatus();
-  const own = status === 'own';
-  addBtn.hidden = own;
-  updateBtn.hidden = !own;
-  deleteBtn.hidden = !own;
-  addBtn.disabled = status === 'theirs' || status === 'taken';
+  addBtn.disabled = status !== 'free';
+  updateBtn.disabled = status !== 'own';
+  deleteBtn.disabled = status !== 'own';
 }
 
 function showDeleteConfirm() {
   const confirm = document.getElementById('deleteConfirm');
-  const deleteBtn = document.getElementById('deleteBtn');
   if (!confirm || !lastLoaded) return;
   document.getElementById('deleteConfirmText').textContent =
     `Delete “${lastLoaded}” for good?`;
   confirm.hidden = false;
-  if (deleteBtn) deleteBtn.hidden = true;
 }
 
 function hideDeleteConfirm() {
@@ -374,8 +370,8 @@ export async function mount(el, shared) {
         <span class="group-label">Name</span>
         <label class="field"><input type="text" id="name" placeholder="Maze name" size="12"></label>
         <button class="btn btn-primary" id="addBtn" type="button">➕ Add</button>
-        <button class="btn btn-primary" id="updateBtn" type="button" hidden>💾 Update</button>
-        <button class="btn btn-danger" id="deleteBtn" type="button" hidden>🗑️ Delete</button>
+        <button class="btn btn-primary" id="updateBtn" type="button">💾 Update</button>
+        <button class="btn btn-danger" id="deleteBtn" type="button">🗑️ Delete</button>
         <span class="delete-confirm" id="deleteConfirm" hidden>
           <span id="deleteConfirmText"></span>
           <button class="btn btn-danger" id="deleteYesBtn" type="button">Yes, delete</button>
