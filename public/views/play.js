@@ -5,14 +5,14 @@
 // Rendering: draw() rasterizes every panel with the software z-buffer
 // in Raster.js (per-pixel inverse-z depth; no draw-order dependence).
 
-import { getMazeData, listMazes } from '../MazeDB.js?v=4.3.1';
-import Maze from '../Maze.js?v=4.3.1';
-import Player from '../Player.js?v=4.3.1';
-import Map from '../Map.js?v=4.3.1';
-import { Rect3d } from "../Geometry.js?v=4.3.1";
-import { clearFrame, drawTriangle, drawTexturedTriangle, packColor, WHITE } from '../Raster.js?v=4.3.1';
-import * as Multiplayer from '../Multiplayer.js?v=4.3.1';
-import { getUser } from '../Auth.js?v=4.3.1';
+import { getMazeData, listMazes } from '../MazeDB.js?v=4.3.2';
+import Maze from '../Maze.js?v=4.3.2';
+import Player from '../Player.js?v=4.3.2';
+import Map from '../Map.js?v=4.3.2';
+import { Rect3d } from "../Geometry.js?v=4.3.2";
+import { clearFrame, drawTriangle, drawTexturedTriangle, packColor, WHITE } from '../Raster.js?v=4.3.2';
+import * as Multiplayer from '../Multiplayer.js?v=4.3.2';
+import { getUser } from '../Auth.js?v=4.3.2';
 
 let maze, player, map;
 let canvas, ctx;
@@ -171,7 +171,7 @@ function myPos() {
 // direction and local +z onto their left, so x is the figure's
 // front-to-back thickness and z its left-to-right width. The wide
 // dimensions (legs stance 0.32, shoulders 0.38) run along z; the
-// thin ones (0.18 / 0.22) along x. (Before 4.3.1 these were
+// thin ones (0.18 / 0.22) along x. (Before 4.3.2 these were
 // swapped, which made the figure read as rotated 90°: narrow from
 // the front, wide from the side. The legs were also a single slab.)
 function personParts(color, s) {

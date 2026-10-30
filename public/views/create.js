@@ -3,14 +3,15 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.3.1';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.3.1';
+import Maze from '../Maze.js?v=4.3.2';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.3.2';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
 let startX = -1, startY = -1, endX = -1, endY = -1;
 let ac = null;
 let sharedRef = null;
+let wrapObserver = null;
 // This view's own memory, independent of the play view: the drawing
 // state (h/v/start/end live in module scope and survive unmount), which
 // maze it came from, and the toolbar's name/direction as last left.
@@ -555,6 +556,18 @@ export async function mount(el, shared) {
     render();
   }, { signal });
 
+  // The toolbar can wrap (or the Load select widen once its options
+  // arrive) after the first paint without any window resize, which
+  // shrinks the wrap — the canvas bitmap must track the wrap's real
+  // size or the maze is drawn too tall and runs off the screen.
+  if (window.ResizeObserver) {
+    wrapObserver = new ResizeObserver(() => {
+      fitCanvas();
+      render();
+    });
+    wrapObserver.observe(wrap);
+  }
+
 }
 
 export function unmount() {
@@ -571,6 +584,10 @@ export function unmount() {
   if (ac) {
     ac.abort();
     ac = null;
+  }
+  if (wrapObserver) {
+    wrapObserver.disconnect();
+    wrapObserver = null;
   }
   document.body.style.cursor = 'auto';
   canvas = ctx = wrap = null;

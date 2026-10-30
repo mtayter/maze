@@ -738,6 +738,10 @@ canvas.editor-canvas {
   display: block;
   position: absolute;
   inset: 0;
+  /* A canvas is a replaced element: inset alone leaves it at its
+     bitmap size, overflowing the wrap when the two disagree. */
+  width: 100%;
+  height: 100%;
   touch-action: none; /* taps place walls; stop scroll/zoom gestures */
 }
 
