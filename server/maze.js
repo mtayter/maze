@@ -652,6 +652,32 @@ app.post('/app/maze/save', requireAuth, async (req, res) => {
   }
 });
 
+app.post('/app/maze/delete', requireAuth, async (req, res) => {
+  try {
+    const name = req.body && req.body.maze;
+    if (typeof name !== 'string' || !name) {
+      res.status(400).json({ error: 'maze required' });
+      return;
+    }
+    const owner = await mazeOwner(name);
+    if (owner === null) {
+      res.status(404).json({ error: 'Maze not found' });
+      return;
+    }
+    if (owner !== req.user.user_id) {
+      res.status(403).json({ error: 'That maze belongs to someone else' });
+      return;
+    }
+    await withDb(async (db) => {
+      await db.execute('DELETE FROM maze WHERE name = ?', [name]);
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ error: 'server error' });
+  }
+});
+
 async function getMaze(maze) {
   return withDb(async (db) => {
     const [rows] = await db.execute(

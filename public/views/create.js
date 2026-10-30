@@ -3,8 +3,8 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.2.0';
-import { saveMazeData, listMazes, getMazeData } from '../MazeDB.js?v=4.2.0';
+import Maze from '../Maze.js?v=4.3.0';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.3.0';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -52,11 +52,38 @@ function nameStatus() {
   return 'free';
 }
 
+// Which action buttons exist is driven by the name field (see
+// nameStatus): your own loaded maze gets Update + Delete; anything
+// else is an Add (a brand-new maze, or your copy of someone else's),
+// disabled while the name is taken. Any state refresh also closes
+// the delete confirmation.
 function refreshSaveState() {
-  const saveBtn = document.getElementById('saveBtn');
-  if (!saveBtn) return;
+  const addBtn = document.getElementById('addBtn');
+  if (!addBtn) return;
+  const updateBtn = document.getElementById('updateBtn');
+  const deleteBtn = document.getElementById('deleteBtn');
+  hideDeleteConfirm();
   const status = nameStatus();
-  saveBtn.disabled = status === 'theirs' || status === 'taken';
+  const own = status === 'own';
+  addBtn.hidden = own;
+  updateBtn.hidden = !own;
+  deleteBtn.hidden = !own;
+  addBtn.disabled = status === 'theirs' || status === 'taken';
+}
+
+function showDeleteConfirm() {
+  const confirm = document.getElementById('deleteConfirm');
+  const deleteBtn = document.getElementById('deleteBtn');
+  if (!confirm || !lastLoaded) return;
+  document.getElementById('deleteConfirmText').textContent =
+    `Delete “${lastLoaded}” for good?`;
+  confirm.hidden = false;
+  if (deleteBtn) deleteBtn.hidden = true;
+}
+
+function hideDeleteConfirm() {
+  const confirm = document.getElementById('deleteConfirm');
+  if (confirm) confirm.hidden = true;
 }
 
 function showNameError(message) {
@@ -122,6 +149,37 @@ async function save_maze() {
   updateOwnerNote();
   clearNameError();
   refreshSaveState();
+}
+
+async function delete_maze() {
+  const name = lastLoaded;
+  if (!name || !loadedMine) {
+    return;
+  }
+  try {
+    await deleteMaze(name);
+  } catch (err) {
+    if (err && err.status === 403) {
+      alert(`“${name}” belongs to someone else.`);
+    } else if (!err || err.status !== 401) {
+      alert('Deleting failed — the maze server hiccuped. Try again in a moment.');
+    }
+    refreshSaveState();
+    return;
+  }
+  // The drawing stays on screen as a new, unsaved maze under the
+  // same (now free) name — Add brings it back if that was a mistake.
+  lastLoaded = '';
+  savedName = name;
+  loadedMine = true;
+  loadedOwnerName = '';
+  setDirty(true);
+  await populateMazeSelect();
+  document.querySelector('#mazeSelect').value = '';
+  updateOwnerNote();
+  clearNameError();
+  refreshSaveState();
+  alert(`Deleted “${name}”.`);
 }
 
 function x(x) {
@@ -315,7 +373,14 @@ export async function mount(el, shared) {
       <div class="editor-group">
         <span class="group-label">Name</span>
         <label class="field"><input type="text" id="name" placeholder="Maze name" size="12"></label>
-        <button class="btn btn-primary" id="saveBtn" type="button">💾 Save</button>
+        <button class="btn btn-primary" id="addBtn" type="button">➕ Add</button>
+        <button class="btn btn-primary" id="updateBtn" type="button" hidden>💾 Update</button>
+        <button class="btn btn-danger" id="deleteBtn" type="button" hidden>🗑️ Delete</button>
+        <span class="delete-confirm" id="deleteConfirm" hidden>
+          <span id="deleteConfirmText"></span>
+          <button class="btn btn-danger" id="deleteYesBtn" type="button">Yes, delete</button>
+          <button class="btn" id="deleteNoBtn" type="button">Cancel</button>
+        </span>
         <span class="name-error" id="nameError" role="alert"></span>
       </div>
     </header>
@@ -325,14 +390,25 @@ export async function mount(el, shared) {
   `;
 
   const reloadBtn = document.getElementById('reloadBtn');
-  const saveBtn = document.getElementById('saveBtn');
 
   reloadBtn.addEventListener('click', () => {
     draw_blank_maze();
   }, { signal });
 
-  saveBtn.addEventListener('click', () => {
+  document.getElementById('addBtn').addEventListener('click', () => {
     save_maze();
+  }, { signal });
+  document.getElementById('updateBtn').addEventListener('click', () => {
+    save_maze();
+  }, { signal });
+  document.getElementById('deleteBtn').addEventListener('click', () => {
+    showDeleteConfirm();
+  }, { signal });
+  document.getElementById('deleteYesBtn').addEventListener('click', () => {
+    delete_maze();
+  }, { signal });
+  document.getElementById('deleteNoBtn').addEventListener('click', () => {
+    refreshSaveState();
   }, { signal });
 
   // Save availability follows the name field: recheck on every edit,

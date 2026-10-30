@@ -373,6 +373,20 @@ body.signed-out .shell-nav { display: none; }
   cursor: not-allowed;
   transform: none;
 }
+.btn[hidden] { display: none; }
+.btn-danger {
+  background: #dc2626;
+  border-color: #991b1b;
+  color: #ffffff;
+}
+.btn-danger:active { background: #991b1b; }
+.delete-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.delete-confirm[hidden] { display: none; }
 .btn[aria-pressed="true"] {
   background: var(--accent-soft);
   border-color: var(--accent);

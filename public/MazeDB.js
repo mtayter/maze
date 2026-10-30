@@ -1,4 +1,4 @@
-import Maze from './Maze.js?v=4.2.0';
+import Maze from './Maze.js?v=4.3.0';
 
 // The API gates everything behind the session cookie. A 401 means the
 // session is gone: tell the shell (Auth listens for this) and fail the
@@ -58,6 +58,24 @@ export async function listMazes() {
     })();
   }
   return listCache;
+}
+
+export async function deleteMaze(mazeName) {
+  listCache = null;
+  try {
+    const response = await fetch('/app/maze/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ maze: mazeName })
+    });
+
+    checkResponse(response);
+
+    return await response.json();
+  } catch (err) {
+    console.error('Error sending data: ', err);
+    throw err;
+  }
 }
 
 export async function saveMazeData(mazeName, h, v, start_x, start_y, end_x, end_y, direction) {
