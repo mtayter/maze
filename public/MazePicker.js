@@ -1,4 +1,4 @@
-import { listMazes } from './MazeDB.js?v=4.6.0';
+import { listMazes } from './MazeDB.js?v=4.7.0';
 
 // A dialog listing every maze — name plus owner — with each name a
 // pick target. This replaces the native <select> maze pickers: a

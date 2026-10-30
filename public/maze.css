@@ -26,6 +26,10 @@
 
 * { box-sizing: border-box; }
 
+/* The hidden attribute always wins over component display rules —
+   state-driven buttons and groups rely on it. */
+[hidden] { display: none !important; }
+
 html, body {
   width: 100%;
   height: 100%;
@@ -392,7 +396,8 @@ body.signed-out .shell-nav { display: none; }
   flex-wrap: nowrap;
   gap: 8px;
 }
-.editor-bar input:disabled { opacity: 0.45; }
+.editor-bar input:disabled,
+.editor-bar select:disabled { opacity: 0.45; }
 #topbar .field > .btn { flex: 1 1 auto; }
 
 /* Maze picker dialog (replaces the native maze <select>s) */

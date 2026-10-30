@@ -3,9 +3,9 @@
 // registered during mount. Edits set shared.editorDirty so the shell's
 // version check never force-reloads over unsaved work; saving clears it.
 
-import Maze from '../Maze.js?v=4.6.0';
-import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.6.0';
-import { openMazePicker } from '../MazePicker.js?v=4.6.0';
+import Maze from '../Maze.js?v=4.7.0';
+import { saveMazeData, deleteMaze, listMazes, getMazeData } from '../MazeDB.js?v=4.7.0';
+import { openMazePicker } from '../MazePicker.js?v=4.7.0';
 
 let canvas, ctx, wrap, win_width, win_height, cell_size, offsetX = 24, offsetY = 24;
 let h = null, v = null, selector = "walls";
@@ -54,30 +54,54 @@ function nameStatus() {
   return 'free';
 }
 
-// The save and delete buttons are always visible; each is enabled
-// exactly when clicking it would work, driven by the name field
-// (see nameStatus). The save button is one button with two
-// identities: ➕ Add for a fresh, non-blank name, 💾 Update when
-// the name is your own loaded maze — which is also the only state
-// where Delete is enabled. The size inputs lock while an existing
-// maze is loaded: a saved maze's dimensions are its wall arrays,
-// chosen when it was created blank. Any state refresh also closes
-// the delete confirmation.
+// Button visibility is state-driven: a button shows only when it
+// can act. Inputs, by contrast, stay visible and grey out — they
+// display state (the loaded maze's name and size). The save button
+// is one button with two identities: ➕ Add for a fresh, non-blank
+// name, 💾 Update when the name is your own loaded maze. Copy
+// shows whenever a maze is loaded: it detaches the drawing into a
+// new unsaved maze. While any maze is loaded the name box locks to
+// its name; while someone ELSE's maze is loaded the whole editing
+// surface locks (size, facing, tools, canvas) — that maze is
+// view-only until copied. Any state refresh also closes the
+// delete confirmation.
 function refreshSaveState() {
   const saveBtn = document.getElementById('saveBtn');
   if (!saveBtn) return;
-  const deleteBtn = document.getElementById('deleteBtn');
   hideDeleteConfirm();
   const status = nameStatus();
   const own = status === 'own';
+  const loaded = lastLoaded !== '';
+  const toolsLocked = loaded && !loadedMine;
   saveBtn.textContent = own ? '💾 Update' : '➕ Add';
-  saveBtn.disabled = !(own || status === 'free');
-  deleteBtn.disabled = !own;
-  const sizeLocked = lastLoaded !== '';
-  const widthEl = document.getElementById('width');
-  const heightEl = document.getElementById('height');
-  if (widthEl) widthEl.disabled = sizeLocked;
-  if (heightEl) heightEl.disabled = sizeLocked;
+  saveBtn.hidden = !(own || status === 'free');
+  document.getElementById('deleteBtn').hidden = !own;
+  document.getElementById('copyBtn').hidden = !loaded;
+  document.getElementById('name').disabled = loaded;
+  document.getElementById('width').disabled = toolsLocked;
+  document.getElementById('height').disabled = toolsLocked;
+  document.querySelector('#directionSelect').disabled = toolsLocked;
+  const seg = document.querySelector('.segmented');
+  if (seg) seg.closest('.editor-group').hidden = toolsLocked;
+}
+
+// Copy detaches the drawing from the maze it was loaded from: it
+// becomes a new, unsaved maze — the name box unlocks and blanks,
+// the mode returns to Add, and the editing surface unlocks. The
+// original stays saved under its own name, untouched.
+function copy_maze() {
+  if (!lastLoaded) return;
+  lastLoaded = '';
+  savedName = '';
+  loadedMine = true;
+  loadedOwnerName = '';
+  const nameInput = document.getElementById('name');
+  nameInput.value = '';
+  setDirty(true);
+  updateOwnerNote();
+  clearNameError();
+  refreshSaveState();
+  nameInput.focus();
 }
 
 function showDeleteConfirm() {
@@ -180,6 +204,123 @@ async function delete_maze() {
   clearNameError();
   refreshSaveState();
   alert(`Deleted “${name}”.`);
+}
+
+// The W/H inputs are live controls: editing one resizes the
+// drawing in place. Growing appends open blank space — to the
+// right, and at the screen's bottom (which is data y=0 under the
+// editor's flip, so existing rows shift up); the new outer border
+// is walled and the old border opens as a seam so the new space is
+// part of the maze. Shrinking cuts from the same edges, and if
+// anything would be cut — wall segments, the start or end square —
+// it asks first, naming what would go.
+function applySize() {
+  const widthEl = document.getElementById('width');
+  const heightEl = document.getElementById('height');
+  const curW = h.length;
+  const curH = v.length;
+  const newW = Math.min(40, Math.max(1, parseInt(widthEl.value) || curW));
+  const newH = Math.min(40, Math.max(1, parseInt(heightEl.value) || curH));
+  if (newW === curW && newH === curH) {
+    widthEl.value = curW;
+    heightEl.value = curH;
+    return;
+  }
+
+  // What would a shrink cut off? (Boundary lines are structural;
+  // only interior segments and the start/end squares count.)
+  const lost = [];
+  let wallCount = 0;
+  if (newW < curW) {
+    for (let cx = newW; cx < curW; cx++) {
+      for (let cy = 1; cy < curH; cy++) if (h[cx][cy]) wallCount++;
+    }
+    for (let cy = 0; cy < curH; cy++) {
+      for (let cx = newW + 1; cx < curW; cx++) if (v[cy][cx]) wallCount++;
+    }
+    if (startX >= newW) lost.push('the start square');
+    if (endX >= newW) lost.push('the end square');
+  }
+  if (newH < curH) {
+    const drop = curH - newH;
+    for (let cy = 0; cy < drop; cy++) {
+      for (let cx = 1; cx < curW; cx++) if (v[cy][cx]) wallCount++;
+    }
+    for (let cx = 0; cx < curW; cx++) {
+      for (let cy = 1; cy < drop; cy++) if (h[cx][cy]) wallCount++;
+    }
+    if (startY >= 0 && startY < drop) lost.push('the start square');
+    if (endY >= 0 && endY < drop) lost.push('the end square');
+  }
+  if (wallCount > 0) {
+    lost.unshift(`${wallCount} wall segment${wallCount === 1 ? '' : 's'}`);
+  }
+  if (lost.length > 0 &&
+      !confirm(`Shrinking will cut off ${lost.join(', ')}. Shrink anyway?`)) {
+    widthEl.value = curW;
+    heightEl.value = curH;
+    return;
+  }
+
+  if (newW > curW) {
+    for (let cx = curW; cx < newW; cx++) {
+      const col = new Array(curH + 1).fill(0);
+      col[0] = 1;
+      col[curH] = 1;
+      h.push(col);
+    }
+    for (let cy = 0; cy < curH; cy++) {
+      v[cy][curW] = 0; // open the seam where the old right border was
+      for (let cx = curW + 1; cx <= newW; cx++) {
+        v[cy][cx] = cx === newW ? 1 : 0;
+      }
+    }
+  }
+  if (newH > curH) {
+    const add = newH - curH;
+    for (let i = 0; i < add; i++) {
+      const row = new Array(h.length + 1).fill(0);
+      row[0] = 1;
+      row[h.length] = 1;
+      v.unshift(row);
+    }
+    for (let cx = 0; cx < h.length; cx++) {
+      h[cx].unshift(...new Array(add).fill(0));
+      h[cx][0] = 1;   // new bottom border
+      h[cx][add] = 0; // the shifted old bottom border, opened as a seam
+    }
+    if (startY >= 0) startY += add;
+    if (endY >= 0) endY += add;
+  }
+  if (newW < h.length) {
+    h.length = newW;
+    for (let cy = 0; cy < v.length; cy++) {
+      v[cy].length = newW + 1;
+    }
+    if (startX >= newW) startX = startY = -1;
+    if (endX >= newW) endX = endY = -1;
+  }
+  if (newH < v.length) {
+    const drop = v.length - newH;
+    v.splice(0, drop);
+    for (let cx = 0; cx < h.length; cx++) {
+      h[cx].splice(0, drop);
+    }
+    if (startY >= 0) {
+      if (startY < drop) startX = startY = -1;
+      else startY -= drop;
+    }
+    if (endY >= 0) {
+      if (endY < drop) endX = endY = -1;
+      else endY -= drop;
+    }
+  }
+
+  widthEl.value = h.length;
+  heightEl.value = v.length;
+  setDirty(true);
+  render();
+  refreshSaveState();
 }
 
 function x(x) {
@@ -402,8 +543,9 @@ export async function mount(el, shared) {
         <label class="field"><input type="text" id="name" placeholder="Maze name" size="12"></label>
         <span class="action-row">
           <button class="btn btn-primary" id="saveBtn" type="button">➕ Add</button>
-          <button class="btn btn-danger" id="deleteBtn" type="button">🗑️ Delete</button>
+          <button class="btn btn-danger" id="deleteBtn" type="button" hidden>🗑️ Delete</button>
         </span>
+        <button class="btn" id="copyBtn" type="button" hidden>📋 Copy</button>
         <span class="delete-confirm" id="deleteConfirm" hidden>
           <span id="deleteConfirmText"></span>
           <button class="btn btn-danger" id="deleteYesBtn" type="button">Yes, delete</button>
@@ -426,6 +568,11 @@ export async function mount(el, shared) {
   document.getElementById('saveBtn').addEventListener('click', () => {
     save_maze();
   }, { signal });
+  document.getElementById('copyBtn').addEventListener('click', () => {
+    copy_maze();
+  }, { signal });
+  document.getElementById('width').addEventListener('change', applySize, { signal });
+  document.getElementById('height').addEventListener('change', applySize, { signal });
   document.getElementById('deleteBtn').addEventListener('click', () => {
     showDeleteConfirm();
   }, { signal });
@@ -517,6 +664,8 @@ export async function mount(el, shared) {
 
   canvas.addEventListener("pointerdown", function(event) {
     if (!event.isPrimary) return;
+    // Someone else's maze is view-only until copied.
+    if (lastLoaded && !loadedMine) return;
     event.preventDefault();
 
     const rect = canvas.getBoundingClientRect();
